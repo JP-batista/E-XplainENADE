@@ -14,28 +14,49 @@ from statsmodels.regression.linear_model import RegressionResultsWrapper
 from statsmodels.stats.diagnostic import het_breuschpagan
 
 
+_SHAPIRO_MAX_N = 5000  # scipy avisa que p-valor não é confiável para n > 5000
+
+
 def run_diagnostics(result: RegressionResultsWrapper) -> dict:
     """
     Executa Shapiro-Wilk e Breusch-Pagan sobre os resíduos do modelo ajustado.
 
+    Nota sobre Shapiro-Wilk com n > 5000: o teste se torna extremamente sensível
+    a desvios mínimos da normalidade, rejeitando H0 mesmo quando a distribuição
+    é praticamente normal. Para n > 5000, o resultado é reportado com aviso;
+    a análise visual do QQ-plot e o Teorema Central do Limite (n >> 30) são
+    evidências complementares mais robustas nesse regime amostral.
+
     Returns
     -------
     dict com chaves:
-      shapiro_stat, shapiro_pvalue, shapiro_normal (bool)
+      shapiro_stat, shapiro_pvalue, shapiro_normal (bool), shapiro_confiavel (bool)
       bp_stat, bp_pvalue, bp_homocedastic (bool)
     """
     residuals = result.resid.values
+    n = len(residuals)
 
-    sw_stat, sw_pvalue = stats.shapiro(residuals)
+    # Shapiro-Wilk: usa amostra de 5000 quando n > limite para resultado confiável
+    if n > _SHAPIRO_MAX_N:
+        rng = np.random.default_rng(seed=42)
+        sample = rng.choice(residuals, size=_SHAPIRO_MAX_N, replace=False)
+        sw_stat, sw_pvalue = stats.shapiro(sample)
+        shapiro_confiavel = False
+    else:
+        sw_stat, sw_pvalue = stats.shapiro(residuals)
+        shapiro_confiavel = True
+
     bp_stat, bp_pvalue, _, _ = het_breuschpagan(residuals, result.model.exog)
 
     return {
-        "shapiro_stat":     round(float(sw_stat), 6),
-        "shapiro_pvalue":   round(float(sw_pvalue), 6),
-        "shapiro_normal":   float(sw_pvalue) >= 0.05,
-        "bp_stat":          round(float(bp_stat), 6),
-        "bp_pvalue":        round(float(bp_pvalue), 6),
-        "bp_homocedastic":  float(bp_pvalue) >= 0.05,
+        "shapiro_stat":       round(float(sw_stat), 6),
+        "shapiro_pvalue":     round(float(sw_pvalue), 6),
+        "shapiro_normal":     float(sw_pvalue) >= 0.05,
+        "shapiro_confiavel":  shapiro_confiavel,
+        "shapiro_n_usado":    min(n, _SHAPIRO_MAX_N),
+        "bp_stat":            round(float(bp_stat), 6),
+        "bp_pvalue":          round(float(bp_pvalue), 6),
+        "bp_homocedastic":    float(bp_pvalue) >= 0.05,
     }
 
 

@@ -105,6 +105,9 @@ VARIABLE_MAP = {
 # Mapa reverso: código amigável → coluna bruta
 REVERSE_MAP = {v["code"]: k for k, v in VARIABLE_MAP.items()}
 
+# Código amigável → rótulo legível (usado na interpretação automática)
+CODE_TO_LABEL = {v["code"]: v["label"] for v in VARIABLE_MAP.values()}
+
 # Variáveis analiticamente mais relevantes para modelagem de desempenho CC/SI
 # (sugeridas pela literatura e pelo MultiENADE)
 VARS_SUGERIDAS = [

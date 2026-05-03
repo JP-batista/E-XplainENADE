@@ -7,10 +7,11 @@ com features independentes, os valores SHAP equivalem aos coeficientes
 ponderados pela diferença em relação à média das variáveis, o que confere
 rigor matemático à interpretação gerada automaticamente.
 """
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
+import patsy
 import shap
 from statsmodels.regression.linear_model import RegressionResultsWrapper
 
@@ -19,9 +20,13 @@ def compute_shap(
     result: RegressionResultsWrapper,
     df: pd.DataFrame,
     x_vars: List[str],
-) -> np.ndarray:
+) -> Tuple[np.ndarray, List[str]]:
     """
     Calcula os valores SHAP via LinearExplainer sobre o modelo OLS ajustado.
+
+    Usa a matriz de design completa (via patsy) para tratar corretamente
+    termos de interação (ex: QE_RENDA:QE_HORAS_ESTUDO). O LinearExplainer
+    recebe (coef, intercept) extraídos do resultado statsmodels.
 
     Parameters
     ----------
@@ -30,21 +35,31 @@ def compute_shap(
     df : pd.DataFrame
         DataFrame com os dados de entrada (pré-processado).
     x_vars : list[str]
-        Variáveis independentes usadas no modelo.
+        Variáveis independentes base (sem termos de interação).
 
     Returns
     -------
-    np.ndarray
-        Array (n_obs × n_features) de valores SHAP.
+    shap_values : np.ndarray  (n_obs × n_features_design)
+    feature_names : list[str]  — nomes das colunas da matriz de design
     """
-    X = df[x_vars].dropna()
-    explainer = shap.LinearExplainer(result, X)
-    return explainer.shap_values(X)
+    df_clean = df[x_vars].dropna()
+
+    # Reconstrói a matriz de design com os mesmos termos usados no ajuste
+    formula_rhs = result.model.formula.split("~")[1].strip()
+    X_dm = patsy.dmatrix(formula_rhs, df_clean, return_type="dataframe")
+    X_features = X_dm.drop(columns=["Intercept"], errors="ignore")
+
+    feature_names = list(X_features.columns)
+    coef = result.params.drop("Intercept", errors="ignore").reindex(feature_names).values
+    intercept = float(result.params.get("Intercept", 0.0))
+
+    explainer = shap.LinearExplainer((coef, intercept), X_features)
+    return explainer.shap_values(X_features), feature_names
 
 
 def get_shap_summary(
     shap_values: np.ndarray,
-    x_vars: List[str],
+    feature_names: List[str],
 ) -> pd.DataFrame:
     """
     Retorna o impacto médio absoluto de cada variável (base do beeswarm/bar plot).
@@ -56,7 +71,7 @@ def get_shap_summary(
     """
     mean_abs = np.abs(shap_values).mean(axis=0)
     return (
-        pd.DataFrame({"variavel": x_vars, "shap_mean_abs": mean_abs})
+        pd.DataFrame({"variavel": feature_names, "shap_mean_abs": mean_abs})
         .sort_values("shap_mean_abs", ascending=False)
         .reset_index(drop=True)
     )

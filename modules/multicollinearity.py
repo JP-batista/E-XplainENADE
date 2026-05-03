@@ -31,10 +31,14 @@ def compute_vif(df: pd.DataFrame, x_vars: List[str]) -> pd.DataFrame:
         Colunas: variavel, vif, alerta
         alerta: 'ok' | 'moderado (VIF > 5)' | 'severo (VIF > 10)'
     """
+    from statsmodels.tools.tools import add_constant
     subset = df[x_vars].dropna()
+    # add_constant é necessário para VIF correto em modelos com intercepto;
+    # sem ele, variance_inflation_factor infla artificialmente todos os valores
+    X = add_constant(subset, has_constant="raise" if "const" in subset.columns else "add")
     vif_values = [
-        variance_inflation_factor(subset.values, i)
-        for i in range(subset.shape[1])
+        variance_inflation_factor(X.values, i + 1)  # +1 para pular a coluna const
+        for i in range(len(x_vars))
     ]
 
     def _label(v: float) -> str:
