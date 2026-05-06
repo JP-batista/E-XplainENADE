@@ -93,6 +93,12 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     df = _recode_questionnaire(df)
     df = _convert_types(df)
     df = _rename_columns(df)
+    # CO_CATEGAD (nominal 1-5) binarizado: 1/2/3=Pública→0, 4/5=Privada→1
+    # Uso como preditora contínua seria metodologicamente incorreto (não há ordenamento real)
+    if "CO_CATEGAD" in df.columns:
+        df["TP_CATEGAD_BIN"] = df["CO_CATEGAD"].map(
+            {1: 0, 2: 0, 3: 0, 4: 1, 5: 1}
+        )
     return df
 
 

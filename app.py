@@ -54,7 +54,7 @@ X_OPTS = {
     "Familiar com Ens. Superior":   "QE_FAM_SUPERIOR",
     "Sexo":                         "TP_SEXO",
     "Turno da Graduação":           "CO_TURNO",
-    "Tipo de IES":                  "CO_CATEGAD",
+    "Tipo de IES (Pública/Privada)": "TP_CATEGAD_BIN",
     "Ingresso por Ação Afirmativa": "QE_ACAO_AFIRM",
 }
 CODE_TO_UI_LABEL = {v: k for k, v in X_OPTS.items()}

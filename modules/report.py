@@ -490,14 +490,30 @@ def generate_report(session: Dict[str, Any], filename: str = "relatorio.pdf") ->
         pdf.set_text_color(*_COR_TITULO)
 
     # ── Rodapé com nota metodológica ─────────────────────────────────────────
+    if not filtros:
+        filtro_desc = "conforme filtros selecionados na interface"
+    else:
+        curso_txt = filtros.get("curso", "")
+        ies_txt   = filtros.get("tipo_ies", "")
+        ano_txt   = filtros.get("ano", "2021")
+        partes = []
+        partes.append(
+            f"curso: {curso_txt}" if curso_txt and curso_txt != "Todos"
+            else "todos os cursos"
+        )
+        if ies_txt and ies_txt not in ("Todas", ""):
+            partes.append(f"IES: {ies_txt.lower()}")
+        if ano_txt:
+            partes.append(f"ano {ano_txt}")
+        filtro_desc = ", ".join(partes)
+
     pdf.ln(8)
     pdf.set_font(pdf._f, size=8)
     pdf.set_text_color(*_COR_CINZA)
     pdf.multi_cell(0, 5,
         "Nota metodologica: os resultados foram obtidos por regressao linear multipla "
         "(OLS via statsmodels) com explicabilidade SHAP (LinearExplainer, Lundberg & Lee, 2017). "
-        "Os dados sao os Microdados ENADE 2021 (INEP), versao LGPD, filtrados para as regioes "
-        "Norte e Nordeste, cursos de Ciencia da Computacao e Sistemas de Informacao.",
+        f"Os dados sao os Microdados ENADE 2021 (INEP), versao LGPD ({filtro_desc}).",
         new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(*_COR_TITULO)
 

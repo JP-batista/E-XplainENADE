@@ -107,6 +107,8 @@ REVERSE_MAP = {v["code"]: k for k, v in VARIABLE_MAP.items()}
 
 # Código amigável → rótulo legível (usado na interpretação automática)
 CODE_TO_LABEL = {v["code"]: v["label"] for v in VARIABLE_MAP.values()}
+# Variável derivada (não existe nos arquivos brutos): binarização de CO_CATEGAD
+CODE_TO_LABEL["TP_CATEGAD_BIN"] = "Tipo de IES (Pública/Privada)"
 
 # Labels para valores categóricos — exibição na UI e no relatório
 VALUE_LABELS = {
@@ -115,6 +117,7 @@ VALUE_LABELS = {
         1: "Fed. Pública", 2: "Est. Pública", 3: "Mun. Pública",
         4: "Privada s/fins", 5: "Privada c/fins",
     },
+    "TP_CATEGAD_BIN": {0: "Pública", 1: "Privada"},
     "CO_GRUPO": {4004: "Ciência da Computação", 4006: "Sistemas de Informação"},
     "CO_REGIAO": {1: "Norte", 2: "Nordeste", 3: "Sudeste", 4: "Sul", 5: "Centro-Oeste"},
     "TP_SEXO": {0: "Feminino", 1: "Masculino"},
@@ -136,7 +139,7 @@ VARS_SUGERIDAS = [
     "TP_SEXO",
     "NU_IDADE",
     "CO_TURNO",
-    "CO_CATEGAD",
+    "TP_CATEGAD_BIN",
 ]
 
 
