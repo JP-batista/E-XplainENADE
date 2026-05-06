@@ -108,6 +108,20 @@ REVERSE_MAP = {v["code"]: k for k, v in VARIABLE_MAP.items()}
 # Código amigável → rótulo legível (usado na interpretação automática)
 CODE_TO_LABEL = {v["code"]: v["label"] for v in VARIABLE_MAP.values()}
 
+# Labels para valores categóricos — exibição na UI e no relatório
+VALUE_LABELS = {
+    "CO_TURNO": {1: "Matutino", 2: "Vespertino", 3: "Noturno", 4: "Integral"},
+    "CO_CATEGAD": {
+        1: "Fed. Pública", 2: "Est. Pública", 3: "Mun. Pública",
+        4: "Privada s/fins", 5: "Privada c/fins",
+    },
+    "CO_GRUPO": {4004: "Ciência da Computação", 4006: "Sistemas de Informação"},
+    "CO_REGIAO": {1: "Norte", 2: "Nordeste", 3: "Sudeste", 4: "Sul", 5: "Centro-Oeste"},
+    "TP_SEXO": {0: "Feminino", 1: "Masculino"},
+    "QE_TIPO_EM": {1: "Escola Pública", 2: "Escola Privada"},
+    "QE_FAM_SUPERIOR": {1: "Sim", 2: "Não"},
+}
+
 # Variáveis analiticamente mais relevantes para modelagem de desempenho CC/SI
 # (sugeridas pela literatura e pelo MultiENADE)
 VARS_SUGERIDAS = [

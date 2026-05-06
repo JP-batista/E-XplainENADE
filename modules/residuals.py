@@ -60,6 +60,20 @@ def run_diagnostics(result: RegressionResultsWrapper) -> dict:
     }
 
 
+def get_qqplot_data(result: RegressionResultsWrapper) -> pd.DataFrame:
+    """
+    Retorna DataFrame com quantis teóricos e amostrais para QQ-plot.
+    Colunas: theoretical (quantis normais), sample (resíduos ordenados), line_y (reta de referência)
+    """
+    residuals = result.resid.values
+    (osm, osr), (slope, intercept, _) = stats.probplot(residuals)
+    return pd.DataFrame({
+        "theoretical": osm,
+        "sample":      osr,
+        "line_y":      slope * osm + intercept,
+    })
+
+
 def get_residuals_plot_data(result: RegressionResultsWrapper) -> pd.DataFrame:
     """
     Retorna DataFrame com resíduos e valores preditos para plotagem.

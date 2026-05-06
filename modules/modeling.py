@@ -57,11 +57,11 @@ def get_coefficients_table(result: RegressionResultsWrapper) -> pd.DataFrame:
 def get_model_metrics(result: RegressionResultsWrapper) -> dict:
     """Retorna R², R² ajustado, AIC, BIC e n observações."""
     return {
-        "r2":          round(result.rsquared, 4),
-        "r2_adj":      round(result.rsquared_adj, 4),
-        "aic":         round(result.aic, 2),
-        "bic":         round(result.bic, 2),
+        "r2":          round(float(result.rsquared), 4),
+        "r2_adj":      round(float(result.rsquared_adj), 4),
+        "aic":         round(float(result.aic), 2),
+        "bic":         round(float(result.bic), 2),
         "n_obs":       int(result.nobs),
-        "f_stat":      round(result.fvalue, 4),
-        "f_pvalue":    round(result.f_pvalue, 6),
+        "f_stat":      round(float(result.fvalue), 4),
+        "f_pvalue":    round(float(result.f_pvalue), 6),
     }

@@ -13,9 +13,6 @@ import pandas as pd
 from modules import etl
 from config.variable_map import VARIABLE_MAP
 
-_DEFAULT_GRUPOS = [4004, 4006]  # Ciência da Computação + Sistemas de Informação
-_DEFAULT_REGIOES = [1, 2]       # Norte + Nordeste
-
 # Mapeamento letra → inteiro para QE_I01–QE_I26 (A-E/F/G/H conforme a questão)
 _LETTER_TO_INT = {chr(65 + i): i + 1 for i in range(26)}  # A=1 … Z=26
 
@@ -111,9 +108,9 @@ def get_dataset(
     Parameters
     ----------
     regioes : list[int], optional
-        CO_REGIAO_CURSO a incluir. Padrão: [1, 2] (Norte + Nordeste).
+        CO_REGIAO_CURSO a incluir. None = todas as regiões.
     grupos : list[int], optional
-        CO_GRUPO a incluir. Padrão: [4004, 4006] (CC + SI).
+        CO_GRUPO a incluir. None = todos os cursos.
     apenas_presentes : bool
         Se True, mantém apenas estudantes com TP_PRES == 555. Padrão: True.
 
@@ -124,10 +121,7 @@ def get_dataset(
         Variáveis-alvo: NT_GER, NT_FG, NT_CE.
         Preditores socioeconômicos: QE_RENDA, QE_ESC_MAE, QE_HORAS_ESTUDO, etc.
     """
-    _grupos = grupos if grupos is not None else _DEFAULT_GRUPOS
-    _regioes = regioes if regioes is not None else _DEFAULT_REGIOES
-
-    df = etl.load_raw(grupos=_grupos, regioes=_regioes)
+    df = etl.load_raw(grupos=grupos, regioes=regioes)
     df = preprocess(df)
 
     if apenas_presentes:
