@@ -7,6 +7,7 @@ com features independentes, os valores SHAP equivalem aos coeficientes
 ponderados pela diferença em relação à média das variáveis, o que confere
 rigor matemático à interpretação gerada automaticamente.
 """
+import re
 from typing import List, Tuple
 
 import numpy as np
@@ -42,10 +43,14 @@ def compute_shap(
     shap_values : np.ndarray  (n_obs × n_features_design)
     feature_names : list[str]  — nomes das colunas da matriz de design
     """
-    df_clean = df[x_vars].dropna()
-
-    # Reconstrói a matriz de design com os mesmos termos usados no ajuste
     formula_rhs = result.model.formula.split("~")[1].strip()
+
+    # Extrai todas as colunas referenciadas na fórmula (inclui variáveis de interações)
+    # Usar só x_vars falharia se a fórmula contiver interações com variáveis fora de x_vars
+    formula_cols = list({v for v in re.findall(r'\b([A-Za-z_]\w*)\b', formula_rhs)
+                         if v in df.columns})
+    df_clean = df[formula_cols].dropna()
+
     X_dm = patsy.dmatrix(formula_rhs, df_clean, return_type="dataframe")
     X_features = X_dm.drop(columns=["Intercept"], errors="ignore")
 

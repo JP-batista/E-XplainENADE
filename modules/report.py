@@ -268,9 +268,7 @@ def generate_report(session: Dict[str, Any], filename: str = "relatorio.pdf") ->
         pdf.metrica("R2 Ajustado", r2adj, 60)
         pdf.ln(22)
 
-        interp = session.get("interpretacao_modelo", "")
-        if interp:
-            pdf.caixa_destaque(interp)
+        # A interpretacao completa e exibida apos a tabela de coeficientes (Secao 2)
 
     # ── 2. Efeito de cada fator ───────────────────────────────────────────────
     coef = session.get("coef_table")
@@ -326,6 +324,22 @@ def generate_report(session: Dict[str, Any], filename: str = "relatorio.pdf") ->
         pdf.set_text_color(*_COR_TITULO)
         pdf.ln(4)
 
+        # 2.2 Interpretação automática (formato TCC)
+        interp = session.get("interpretacao_modelo", "")
+        if interp:
+            pdf.titulo_secao("2.2", "Interpretacao Automatica dos Resultados")
+            clean = (
+                interp
+                .replace("**", "")
+                .replace("•", "-")
+                .replace("≥", ">=")
+                .replace("β", "B")
+                .replace("²", "2")
+                .replace("✅", "")
+                .replace("⚠️", "")
+            )
+            pdf.caixa_destaque(clean, (235, 245, 255))
+
     # ── 3. Correlação entre variáveis (VIF) ──────────────────────────────────
     vif = session.get("vif_table")
     if vif is not None:
@@ -370,69 +384,100 @@ def generate_report(session: Dict[str, Any], filename: str = "relatorio.pdf") ->
                        else (255, 243, 205)
             pdf.caixa_destaque(interp_vif, fill_cor)
 
-    # ── 4. Qualidade do modelo (Resíduos) ────────────────────────────────────
+    # ── 4. Diagnóstico de Resíduos ───────────────────────────────────────────
     diag = session.get("residuals_diag", {})
     if diag:
         pdf.add_page()
-        pdf.titulo_secao("4", "Qualidade do Modelo")
+        pdf.titulo_secao("4", "Diagnostico de Residuos")
 
         pdf.caixa_contexto(
-            "Esta secao verifica se o modelo se comporta de forma correta e honesta.\n\n"
-            "Distribuicao dos erros: o modelo deveria errar de forma equilibrada — "
-            "erros pequenos mais comuns, erros grandes raros.\n\n"
-            "Consistencia dos erros: o modelo deveria errar de forma parecida para todos "
-            "os perfis de estudante, independentemente de renda ou outros fatores."
+            "Testes formais que verificam se os pressupostos do modelo OLS sao atendidos.\n\n"
+            "Normalidade (Shapiro-Wilk): H0 = residuos seguem distribuicao normal.\n"
+            "Homocedasticidade (Breusch-Pagan): H0 = variancia dos erros e constante.\n"
+            "Nivel de significancia adotado: 5% (alpha = 0,05)."
         )
 
-        # Tabela de testes
-        widths_r = [70, 45, 65]
-        for h, w in zip(["Verificacao", "Resultado", "O que significa"], widths_r):
-            pdf.th(h, w)
+        sw_ok    = diag["shapiro_normal"]
+        bp_ok    = diag["bp_homocedastic"]
+        sw_n     = diag.get("shapiro_n_usado", 5000)
+        sw_conf  = diag.get("shapiro_confiavel", True)
+        n_obs    = session.get("model_metrics", {}).get("n_obs", 0)
+
+        def _pfmt(p: float) -> str:
+            return "< 0,001" if p < 0.001 else f"{p:.3f}".replace(".", ",")
+
+        sw_note = f" (amostra {sw_n:,})" if not sw_conf else ""
+        sw_h0   = "Residuos normalmente distribuidos"
+        bp_h0   = "Variancia dos erros e constante"
+
+        # Tabela formal de testes
+        widths_t = [44, 66, 24, 22, 24]
+        for h, w in zip(["Teste", "H0 (hipotese nula)", "Estat.", "p-valor", "Decisao"],
+                        widths_t):
+            pdf.th(h, w, align="C")
         pdf.ln()
 
-        sw_ok   = diag["shapiro_normal"]
-        bp_ok   = diag["bp_homocedastic"]
-        conf_sw = "" if diag.get("shapiro_confiavel", True) else "*"
-
-        linhas_res = [
-            (
-                f"Distribuicao dos erros{conf_sw}",
-                "Normal" if sw_ok else "Nao-normal",
-                "Satisfatorio" if sw_ok else "Veja nota abaixo",
-                (212, 237, 218) if sw_ok else (255, 243, 205),
-            ),
-            (
-                "Consistencia dos erros",
-                "Consistente" if bp_ok else "Inconsistente",
-                "Satisfatorio" if bp_ok else "Erros variam entre grupos",
-                (212, 237, 218) if bp_ok else (255, 204, 204),
-            ),
-        ]
-        for nome, res, sig, fill in linhas_res:
-            pdf.td(nome, 70, "L", fill)
-            pdf.td(res,  45, "C", fill)
-            pdf.td(sig,  65, "L", fill)
+        for (nome, h0, stat, pval, ok) in [
+            (f"Shapiro-Wilk{sw_note}", sw_h0,
+             f"{diag['shapiro_stat']:.4f}", _pfmt(diag["shapiro_pvalue"]), sw_ok),
+            ("Breusch-Pagan", bp_h0,
+             f"{diag['bp_stat']:.4f}",    _pfmt(diag["bp_pvalue"]),      bp_ok),
+        ]:
+            fill = (212, 237, 218) if ok else (255, 243, 205)
+            decisao = "Nao rejeita" if ok else "Rejeita"
+            pdf.td(nome,    widths_t[0], "L", fill)
+            pdf.td(h0,      widths_t[1], "L", fill)
+            pdf.td(stat,    widths_t[2], "C", fill)
+            pdf.td(pval,    widths_t[3], "C", fill, bold=True)
+            pdf.td(decisao, widths_t[4], "C", fill, bold=True)
             pdf.ln()
 
-        if not diag.get("shapiro_confiavel", True):
-            pdf.ln(1)
-            pdf.set_font(pdf._f, size=8)
-            pdf.set_text_color(*_COR_CINZA)
-            pdf.cell(0, 5,
-                f"* Teste aplicado em amostra de {diag.get('shapiro_n_usado',5000):,} "
-                f"estudantes. Com mais de 5.000 observacoes, pequenas irregularidades "
-                f"sao detectadas mas tem impacto minimo na validade dos resultados.",
-                new_x="LMARGIN", new_y="NEXT")
-            pdf.set_text_color(*_COR_TITULO)
+        pdf.ln(5)
 
-        pdf.ln(4)
-        interp_res = session.get("interpretacao_residuos", "")
-        if interp_res:
-            fill_cor = (212, 237, 218) if (sw_ok and bp_ok) else (255, 243, 205)
-            # Remove markdown para PDF
-            clean = interp_res.replace("✅", "OK:").replace("⚠️", "Atencao:") \
-                              .replace("ℹ️", "Nota:").replace("**", "")
-            pdf.caixa_destaque(clean, fill_cor)
+        # Mensagens de diagnóstico específicas
+        if not bp_ok:
+            contexto_n = (
+                f" Com n = {n_obs:,}, o teste e altamente sensivel e detecta "
+                f"variacoes minimas de variancia."
+                if n_obs > 5000 else ""
+            )
+            msg_bp = (
+                f"Indicios de heterocedasticidade detectados "
+                f"(Breusch-Pagan p {_pfmt(diag['bp_pvalue'])}).{contexto_n} "
+                f"Os coeficientes continuam nao-viesados, mas os erros-padrao e "
+                f"p-valores podem estar subestimados. Considere: transformacao da "
+                f"variavel dependente (ex: escala logaritmica) ou uso de erros-padrao "
+                f"robustos a heterocedasticidade (HC3)."
+            )
+            pdf.caixa_destaque(msg_bp, (255, 243, 205))
+
+        if not sw_ok:
+            if not sw_conf:
+                msg_sw = (
+                    f"Leve desvio de normalidade nos residuos "
+                    f"(Shapiro-Wilk p {_pfmt(diag['shapiro_pvalue'])}, "
+                    f"avaliado em amostra de {sw_n:,} obs.). "
+                    f"Com n = {n_obs:,}, o Teorema Central do Limite garante a validade "
+                    f"assintotica dos estimadores OLS. Impacto pratico minimo."
+                )
+                pdf.caixa_destaque(msg_sw, (219, 234, 254))
+            else:
+                msg_sw = (
+                    f"Indicios de nao-normalidade dos residuos "
+                    f"(Shapiro-Wilk p {_pfmt(diag['shapiro_pvalue'])}). "
+                    f"Intervalos de confianca e p-valores podem estar afetados. "
+                    f"Verifique outliers ou considere transformacao da variavel dependente."
+                )
+                pdf.caixa_destaque(msg_sw, (255, 243, 205))
+
+        if sw_ok and bp_ok:
+            msg_ok = (
+                f"Todos os pressupostos verificados. Residuos normalmente distribuidos "
+                f"(Shapiro-Wilk p {_pfmt(diag['shapiro_pvalue'])}) e variancia constante "
+                f"(Breusch-Pagan p {_pfmt(diag['bp_pvalue'])}). "
+                f"O modelo OLS e metodologicamente adequado para estes dados."
+            )
+            pdf.caixa_destaque(msg_ok, (212, 237, 218))
 
         # Gráficos de resíduos
         plot_data = session.get("plot_data")
@@ -446,11 +491,11 @@ def generate_report(session: Dict[str, Any], filename: str = "relatorio.pdf") ->
             pdf.set_font(pdf._f, size=8)
             pdf.set_text_color(*_COR_CINZA)
             pdf.multi_cell(0, 5,
-                "Grafico da esquerda: cada ponto e um estudante. Os pontos devem ficar "
-                "espalhados aleatoriamente em volta da linha vermelha (sem padroes visiveis).\n"
-                "Grafico da direita (QQ-plot): os pontos devem seguir a linha diagonal. "
-                "Desvios nas extremidades indicam que o modelo comete erros maiores "
-                "para notas muito altas ou muito baixas.",
+                "Grafico da esquerda: pontos espalhados em volta de y = 0 indicam "
+                "homocedasticidade (variancia constante dos erros).\n"
+                "Grafico da direita (QQ-plot): pontos proximos a linha diagonal indicam "
+                "distribuicao normal dos residuos. Desvios nas extremidades indicam "
+                "erros maiores para notas muito altas ou muito baixas.",
                 new_x="LMARGIN", new_y="NEXT")
             pdf.set_text_color(*_COR_TITULO)
 
