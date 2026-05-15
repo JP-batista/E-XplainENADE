@@ -1,12 +1,12 @@
 """
 Camada 2 — Filtros, recodificação e pré-processamento.
 
-Recebe o DataFrame bruto de etl.load_raw() e entrega um DataFrame
-padronizado, com tipos corretos e colunas renomeadas, pronto para modelagem.
+Recebe o DataFrame bruto de etl.load_raw() (ou de um CSV via upload) e entrega
+um DataFrame padronizado, com tipos corretos e colunas renomeadas, pronto para modelagem.
 Esta camada permanece estável mesmo quando a fonte de dados mudar
-(o SWAP POINT está em etl.py).
+(o SWAP POINT está em etl.py, ou via get_dataset_from_csv() para upload).
 """
-from typing import List, Optional
+from typing import IO, List, Optional, Union
 
 import pandas as pd
 
@@ -130,6 +130,51 @@ def get_dataset(
     df = etl.load_raw(grupos=grupos, regioes=regioes)
     df = preprocess(df)
 
+    if apenas_presentes:
+        df = df[df["TP_PRES"] == 555].reset_index(drop=True)
+
+    return df
+
+
+def get_dataset_from_csv(
+    csv_file: Union[str, IO],
+    grupos: Optional[List[int]] = None,
+    ies_filter: Optional[List[int]] = None,
+    apenas_presentes: bool = True,
+) -> pd.DataFrame:
+    """
+    Alternativa a get_dataset() para quando os dados vêm de um CSV gerado por gerar_csv.py.
+
+    O CSV deve ter sido gerado com etl.load_raw() (colunas brutas: QE_I08, CO_GRUPO, etc.).
+    O pré-processamento (recodificação, tipagem, renomeação) é aplicado aqui da mesma forma.
+
+    Parameters
+    ----------
+    csv_file : str | file-like
+        Caminho do CSV ou objeto de arquivo (ex: UploadedFile do Streamlit).
+    grupos : list[int], optional
+        CO_GRUPO a incluir. None = todos os cursos.
+    ies_filter : list[int], optional
+        Valores de CO_CATEGAD a incluir. None = todos os tipos de IES.
+    apenas_presentes : bool
+        Se True, mantém apenas TP_PRES == 555. Padrão: True.
+
+    Returns
+    -------
+    pd.DataFrame
+        Mesmo formato de get_dataset() — pronto para modelagem.
+    """
+    # Detecta compressão pelo nome do arquivo (suporta .csv e .csv.gz)
+    nome = getattr(csv_file, "name", str(csv_file))
+    compression = "gzip" if str(nome).endswith(".gz") else None
+    df = pd.read_csv(csv_file, dtype=str, encoding="utf-8",
+                     low_memory=False, compression=compression)
+    df = preprocess(df)
+
+    if grupos:
+        df = df[df["CO_GRUPO"].isin(grupos)].reset_index(drop=True)
+    if ies_filter:
+        df = df[df["CO_CATEGAD"].isin(ies_filter)].reset_index(drop=True)
     if apenas_presentes:
         df = df[df["TP_PRES"] == 555].reset_index(drop=True)
 

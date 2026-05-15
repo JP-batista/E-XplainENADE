@@ -15,7 +15,7 @@ import pandas as pd
 import streamlit as st
 
 from config.variable_map import CODE_TO_LABEL, VALUE_LABELS
-from modules import etl, loader
+from modules import loader
 from modules.hypothesis import build_hypothesis
 from modules.modeling import fit_ols, get_coefficients_table, get_model_metrics
 from modules.multicollinearity import (
@@ -29,7 +29,7 @@ from modules.report import generate_report
 # ── Configuração da página ────────────────────────────────────────────────────
 st.set_page_config(
     page_title="E-XplainENADE",
-    page_icon="📊",
+    page_icon="E",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -241,12 +241,15 @@ DEFAULT_X = ["Renda Familiar", "Escolaridade da Mãe", "Horas de Estudo por Sema
 
 # ── Cache de dados ────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
-def _carregar_dados(grupos_tuple, ies_filter_tuple):
-    grupos = list(grupos_tuple) if grupos_tuple is not None else None
-    df = loader.get_dataset(grupos=grupos)
-    if ies_filter_tuple:
-        df = df[df["CO_CATEGAD"].isin(list(ies_filter_tuple))].reset_index(drop=True)
-    return df
+def _carregar_dados_csv(uploaded_file, grupos_tuple, ies_filter_tuple):
+    """Carrega dataset a partir de um CSV gerado por gerar_csv.py."""
+    grupos     = list(grupos_tuple)     if grupos_tuple     else None
+    ies_filter = list(ies_filter_tuple) if ies_filter_tuple else None
+    return loader.get_dataset_from_csv(
+        uploaded_file,
+        grupos=grupos,
+        ies_filter=ies_filter,
+    )
 
 
 # ── Exec-ID da sessão ─────────────────────────────────────────────────────────
@@ -276,7 +279,7 @@ def _coef_table_display(coef_table: pd.DataFrame) -> pd.DataFrame:
             "Fator":          lbl,
             "Efeito na Nota": f"{coef:+.2f}",
             "Direção":        "↑ Aumenta" if coef > 0 else "↓ Diminui",
-            "Confiável?":     "✅ Sim" if p < 0.05 else "❌ Não",
+            "Confiável?":     "Sim" if p < 0.05 else "Não",
             "P-valor":        _p_fmt(p),
             "IC 95%":         f"[{row['ic_inf_95']:.2f} ; {row['ic_sup_95']:.2f}]",
         })
@@ -358,13 +361,13 @@ def _interpretar_vif(vif_table: pd.DataFrame) -> Tuple[str, str]:
     prob = vif_table[vif_table["vif"] > VIF_MODERADO]
     if prob.empty:
         return "ok", (
-            "✅ Nenhum problema de correlação entre variáveis detectado. "
+            "Nenhum problema de correlação entre variáveis detectado. "
             "Os coeficientes do modelo são confiáveis."
         )
     worst = prob.sort_values("vif", ascending=False).iloc[0]
     nivel = "alto" if worst["vif"] > VIF_SEVERO else "moderado"
     return "warning", (
-        f"⚠️ **{_label(worst['variavel'])}** tem correlação {nivel} com as outras variáveis "
+        f"**{_label(worst['variavel'])}** tem correlação {nivel} com as outras variáveis "
         f"(VIF = {worst['vif']:.1f}). "
         f"Isso pode tornar o coeficiente desta variável pouco confiável. "
         f"Recomenda-se removê-la do modelo."
@@ -376,24 +379,24 @@ def _interpretar_residuos(diag: dict) -> str:
     partes = []
     if diag["shapiro_normal"]:
         partes.append(
-            "✅ **Distribuição dos erros:** Os erros do modelo seguem um padrão normal — "
+            "**Distribuição dos erros:** Os erros do modelo seguem um padrão normal — "
             "erros pequenos são mais comuns e erros grandes são raros. Isso é o esperado."
         )
     else:
         nota = (f" (avaliado em amostra de {_SHAPIRO_MAX_N:,} estudantes)"
                 if not diag.get("shapiro_confiavel", True) else "")
         partes.append(
-            f"ℹ️ **Distribuição dos erros:** Os erros não seguem exatamente um padrão normal{nota}. "
+            f"**Distribuição dos erros:** Os erros não seguem exatamente um padrão normal{nota}. "
             f"Com mais de {_SHAPIRO_MAX_N:,} observações, isso tem impacto pequeno na validade dos resultados."
         )
     if diag["bp_homocedastic"]:
         partes.append(
-            "✅ **Consistência dos erros:** O modelo erra de forma parecida para todos os grupos. "
+            "**Consistência dos erros:** O modelo erra de forma parecida para todos os grupos. "
             "Isso indica que os resultados são igualmente confiáveis para diferentes perfis."
         )
     else:
         partes.append(
-            f"⚠️ **Consistência dos erros:** O modelo erra mais para alguns grupos do que para outros "
+            f"**Consistência dos erros:** O modelo erra mais para alguns grupos do que para outros "
             f"(p {_p_fmt(diag['bp_pvalue'])}). "
             f"Os intervalos de confiança podem ser menos precisos para grupos extremos."
         )
@@ -439,7 +442,7 @@ def _style_vif(df: pd.DataFrame):
 
 def _style_coef_display(df: pd.DataFrame):
     def color(row):
-        ok = row["Confiável?"] == "✅ Sim"
+        ok = row["Confiável?"] == "Sim"
         bg = "#1e8449" if ok else "#616a6b"
         return [f"background-color: {bg}; color: #ffffff; font-size: 13px"] * len(row)
     return df.style.apply(color, axis=1)
@@ -454,14 +457,14 @@ def _hero():
 
     status_badge = (
         '<span class="exn-pill" style="background:rgba(16,185,129,0.18);'
-        'border:1px solid rgba(16,185,129,0.35);color:#6ee7b7;">✓ Base carregada</span>'
+        'border:1px solid rgba(16,185,129,0.35);color:#6ee7b7;">Base carregada</span>'
         if df_loaded else
         '<span class="exn-pill" style="background:rgba(255,255,255,0.08);'
         'border:1px solid rgba(255,255,255,0.15);color:#94a3b8;">Aguardando dados</span>'
     )
     model_badge = (
         '<span class="exn-pill" style="background:rgba(139,92,246,0.22);'
-        'border:1px solid rgba(139,92,246,0.38);color:#c4b5fd;">✓ Modelo pronto</span>'
+        'border:1px solid rgba(139,92,246,0.38);color:#c4b5fd;">Modelo pronto</span>'
         if model_done else ""
     )
     st.markdown(f"""
@@ -548,7 +551,7 @@ _hero()
 
 _, _col_reset = st.columns([5, 1])
 with _col_reset:
-    if st.button("🔄 Nova Análise", use_container_width=True,
+    if st.button("Nova Análise", use_container_width=True,
                  help="Limpa a sessão e reinicia do zero"):
         for key in list(st.session_state.keys()):
             if key != "exec_id":
@@ -562,43 +565,64 @@ st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 # ETAPA 1 — Seleção de Base  (sempre visível)
 # ══════════════════════════════════════════════════════════════════════════════
 _etapa_header(1, "Seleção de Base",
-              "Escolha o recorte dos microdados ENADE 2021 a ser analisado")
+              "Envie o arquivo CSV e escolha o recorte a ser analisado")
 
+# ── Upload do CSV ─────────────────────────────────────────────────────────────
+with st.container(border=True):
+    st.markdown('<div class="exn-filter-label">Arquivo de dados — ENADE 2021</div>',
+                unsafe_allow_html=True)
+    csv_upload = st.file_uploader(
+        "Selecione o CSV",
+        type=["csv", "gz"],
+        label_visibility="collapsed",
+        help="Gere o arquivo localmente com: python gerar_csv.py",
+    )
+
+st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+
+# ── Filtros ───────────────────────────────────────────────────────────────────
 col1, col2, col3 = st.columns(3, gap="medium")
 
 with col1:
     with st.container(border=True):
-        st.markdown('<div class="exn-filter-label">📅 Ano</div>', unsafe_allow_html=True)
+        st.markdown('<div class="exn-filter-label">Ano</div>', unsafe_allow_html=True)
         ano_sel = st.radio("Ano", options=list(ANOS_OPTS.keys()),
                            label_visibility="collapsed")
         if not ANOS_OPTS[ano_sel]:
-            st.caption(f"⚠️ {ano_sel} disponível após integração com ENADE-Time.")
+            st.caption(f"Testes iniciais apenas para o ano de 2021.")
 
 with col2:
     with st.container(border=True):
-        st.markdown('<div class="exn-filter-label">🎓 Curso</div>', unsafe_allow_html=True)
+        st.markdown('<div class="exn-filter-label">Curso</div>', unsafe_allow_html=True)
         curso_sel = st.radio("Curso", options=list(CURSO_OPTS.keys()),
                              label_visibility="collapsed")
         if curso_sel == "Engenharia de Software":
-            st.caption("⚠️ Poucos registros no ENADE 2021.")
+            st.caption("Poucos registros no ENADE 2021.")
 
 with col3:
     with st.container(border=True):
-        st.markdown('<div class="exn-filter-label">🏛️ Tipo de IES</div>', unsafe_allow_html=True)
+        st.markdown('<div class="exn-filter-label">Tipo de IES</div>', unsafe_allow_html=True)
         ies_sel = st.radio("Tipo de IES", options=list(IES_OPTS.keys()),
                            label_visibility="collapsed")
 
 st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
+# ── Carregar ──────────────────────────────────────────────────────────────────
 ano_ok = ANOS_OPTS[ano_sel]
-if st.button("Carregar Base", type="primary", disabled=(not ano_ok)):
+btn_disabled = (not ano_ok) or (csv_upload is None)
+btn_label = "Carregar Base" if csv_upload is not None else "Selecione um arquivo CSV acima"
+
+if st.button(btn_label, type="primary", disabled=btn_disabled):
     grupos     = CURSO_OPTS[curso_sel]
     ies_filter = IES_OPTS[ies_sel]
-    with st.spinner("Carregando base de dados (primeira vez ~30s, depois instantâneo)..."):
-        df = _carregar_dados(
-            tuple(grupos) if grupos is not None else None,
+
+    with st.spinner("Processando dados (pode levar alguns segundos)..."):
+        df = _carregar_dados_csv(
+            csv_upload,
+            tuple(grupos) if grupos else (),
             tuple(ies_filter) if ies_filter else (),
         )
+
     st.session_state.df = df
     st.session_state.filtros = {
         "ano": ano_sel, "curso": curso_sel, "tipo_ies": ies_sel,
@@ -618,15 +642,15 @@ if "df" in st.session_state:
     n_analiticas = _n_vars_analiticas(df)
 
     if len(df) == 0:
-        st.error("❌ Nenhum registro encontrado com os filtros selecionados.")
+        st.error("Nenhum registro encontrado com os filtros selecionados.")
         st.stop()
     elif len(df) < _MIN_REGISTROS:
         st.warning(
-            f"⚠️ Base carregada com apenas **{len(df)} registros** — insuficiente para "
+            f"Base carregada com apenas **{len(df)} registros** — insuficiente para "
             f"análise estatística confiável (mínimo: {_MIN_REGISTROS}). Amplie os filtros."
         )
     else:
-        st.success(f"✅ Base carregada com **{len(df):,} registros** · "
+        st.success(f"Base carregada com **{len(df):,} registros** · "
                    f"**{n_analiticas}** variáveis analíticas disponíveis.")
 
     nt_vals  = df["NT_GER"].dropna()
@@ -648,11 +672,11 @@ if "df" in st.session_state:
     col_e, col_f = st.columns(2, gap="medium")
     turno_counts = df["CO_TURNO"].value_counts().rename(VALUE_LABELS.get("CO_TURNO", {}))
     cat_counts   = df["CO_CATEGAD"].value_counts().rename(VALUE_LABELS.get("CO_CATEGAD", {}))
-    with col_e.expander("📊 Distribuição por Turno"):
+    with col_e.expander("Distribuição por Turno"):
         st.dataframe(turno_counts.rename("n"), use_container_width=True)
-    with col_f.expander("🏛️ Distribuição por Tipo de IES"):
+    with col_f.expander("Distribuição por Tipo de IES"):
         st.dataframe(cat_counts.rename("n"), use_container_width=True)
-    with st.expander("🔍 % de dados ausentes por variável (top 10)"):
+    with st.expander("% de dados ausentes por variável (top 10)"):
         st.dataframe(
             ausentes[ausentes > 0].sort_values(ascending=False).head(10)
             .rename("% ausente").to_frame(),
@@ -674,7 +698,7 @@ _etapa_header(2, "Definição da Hipótese",
 
 # 2.1 Variável dependente
 with st.container(border=True):
-    st.markdown('<div class="exn-filter-label">🎯 Variável Dependente (Y) — nota a modelar</div>',
+    st.markdown('<div class="exn-filter-label">Variável Dependente (Y) — nota a modelar</div>',
                 unsafe_allow_html=True)
     y_label = st.radio("Y", options=list(Y_OPTS.keys()),
                        horizontal=True, label_visibility="collapsed")
@@ -684,7 +708,7 @@ st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
 # 2.2 Variáveis independentes
 st.markdown('<div style="font-size:13px;font-weight:700;color:#374151;'
-            'margin-bottom:10px;">📐 Variáveis Independentes (X)</div>',
+            'margin-bottom:10px;">Variáveis Independentes (X)</div>',
             unsafe_allow_html=True)
 
 x_disponiveis = {lbl: cod for lbl, cod in X_OPTS.items() if cod in df.columns}
@@ -715,7 +739,7 @@ st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
 # 2.3 Interações
 with st.container(border=True):
-    st.markdown('<div class="exn-filter-label">🔗 Interações entre variáveis (opcional)</div>',
+    st.markdown('<div class="exn-filter-label">Interações entre variáveis (opcional)</div>',
                 unsafe_allow_html=True)
     interactions = []
     if len(x_vars) >= 2:
@@ -742,7 +766,7 @@ if x_vars:
         preview += f"  +  [{inter_legivel}]"
     st.info(f"**Modelo a executar:** {preview}")
 
-if st.button("▶ Executar Modelagem", type="primary", disabled=(len(x_vars) == 0)):
+if st.button("Executar Modelagem", type="primary", disabled=(len(x_vars) == 0)):
     hyp = build_hypothesis(y_var, x_vars, interactions, df)
     try:
         with st.spinner("Divisão treino/teste → OLS → VIF → resíduos → SHAP…"):
@@ -771,7 +795,7 @@ if st.button("▶ Executar Modelagem", type="primary", disabled=(len(x_vars) == 
 
     except Exception as e:
         st.error(
-            f"❌ Não foi possível executar a modelagem.\n\n"
+            f"Não foi possível executar a modelagem.\n\n"
             f"**Causa provável:** variáveis com valores insuficientes para OLS.\n\n"
             f"**Sugestão:** remova algumas variáveis ou amplie os filtros da base.\n\n"
             f"Detalhe técnico: `{type(e).__name__}: {e}`"
@@ -799,7 +823,7 @@ if st.button("▶ Executar Modelagem", type="primary", disabled=(len(x_vars) == 
             "filtros": st.session_state.get("filtros", {}),
         },
     })
-    st.success("✅ Modelagem concluída! Os resultados aparecem abaixo.")
+    st.success("Modelagem concluída! Os resultados aparecem abaixo.")
     st.rerun()
 
 
@@ -840,7 +864,7 @@ st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 with st.container(border=True):
     st.markdown("**3.1 — Efeito de cada fator na nota**")
     st.caption(
-        "🟢 Verde = efeito comprovado (p < 0,05)  ·  "
+        "Verde = efeito comprovado (p < 0,05)  ·  "
         "↑ Aumenta / ↓ Diminui = direção do efeito  ·  "
         "IC 95% = intervalo de confiança"
     )
@@ -848,10 +872,10 @@ with st.container(border=True):
         _style_coef_display(_coef_table_display(coef_table)),
         use_container_width=True, hide_index=True,
     )
-    with st.expander("ℹ️ Como ler esta tabela?"):
+    with st.expander("Como ler esta tabela?"):
         st.markdown("""
 - **Efeito na Nota**: quanto a nota muda, em média, a cada nível a mais nesta variável
-- **Confiável?**: ✅ = efeito improvável de ser acaso (p < 0,05) | ❌ = sem evidência suficiente
+- **Confiável?**: p < 0,05 = efeito improvável de ser acaso | caso contrário = sem evidência suficiente
 - **P-valor**: abaixo de 0,05 é considerado estatisticamente significativo
 - **IC 95%**: intervalo onde o efeito verdadeiro está em 95% das análises repetidas
         """)
@@ -868,15 +892,15 @@ _section_divider()
 _etapa_header(4, "Multicolinearidade (VIF)",
               "Detecta correlação excessiva entre preditores — VIF > 10 indica problema")
 
-with st.expander("ℹ️ O que é esta análise?"):
+with st.expander("O que é esta análise?"):
     st.markdown("""
 Quando duas variáveis são muito parecidas entre si, os coeficientes ficam instáveis.
 
 | Cor | VIF | Significado |
 |---|---|---|
-| 🟢 Verde | ≤ 5 | Sem problema — variáveis independentes |
-| 🟡 Amarelo | 5–10 | Atenção — correlação moderada |
-| 🔴 Vermelho | > 10 | Problema — considere remover a variável |
+| Verde | ≤ 5 | Sem problema — variáveis independentes |
+| Amarelo | 5–10 | Atenção — correlação moderada |
+| Vermelho | > 10 | Problema — considere remover a variável |
     """)
 
 display_vif = vif.copy()
@@ -893,7 +917,7 @@ if vif_status == "ok":
 else:
     st.warning(vif_msg)
     remove_var = get_variable_to_remove(vif)
-    if st.button(f"🗑️ Remover '{_label(remove_var)}' e Reexecutar", type="primary",
+    if st.button(f"Remover '{_label(remove_var)}' e Reexecutar", type="primary",
                  key="btn_remove_vif"):
         hyp   = st.session_state.hypothesis
         new_x = [v for v in hyp.x_vars if v != remove_var]
@@ -917,7 +941,7 @@ else:
             "vif_table": vt, "residuals_diag": dg, "shap_values": sv,
             "shap_summary": ss, "shap_visivel": False,
         })
-        st.success(f"✅ Variável '{_label(remove_var)}' removida. Modelo reexecutado.")
+        st.success(f"Variável '{_label(remove_var)}' removida. Modelo reexecutado.")
         st.rerun()
 
 
@@ -926,7 +950,7 @@ _section_divider()
 _etapa_header(5, "Diagnóstico de Resíduos",
               "Testes formais de normalidade e homocedasticidade dos resíduos OLS")
 
-with st.expander("ℹ️ O que são estes testes e por que importam?"):
+with st.expander("O que são estes testes e por que importam?"):
     st.markdown("""
 Os pressupostos do modelo OLS exigem que os resíduos (erros do modelo) sejam:
 
@@ -952,14 +976,14 @@ testes_df = pd.DataFrame([
         "H₀":            "Resíduos normalmente distribuídos",
         "Estatística":   f"{diag['shapiro_stat']:.4f}",
         "p-valor":       _p_fmt(diag['shapiro_pvalue']),
-        "Decisão":       "Não rejeita H₀ ✅" if diag["shapiro_normal"] else "Rejeita H₀ ⚠️",
+        "Decisão":       "Não rejeita H₀" if diag["shapiro_normal"] else "Rejeita H₀",
     },
     {
         "Teste":         "Breusch-Pagan",
         "H₀":            "Variância dos erros é constante (homocedasticidade)",
         "Estatística":   f"{diag['bp_stat']:.4f}",
         "p-valor":       _p_fmt(diag['bp_pvalue']),
-        "Decisão":       "Não rejeita H₀ ✅" if diag["bp_homocedastic"] else "Rejeita H₀ ⚠️",
+        "Decisão":       "Não rejeita H₀" if diag["bp_homocedastic"] else "Rejeita H₀",
     },
 ])
 
@@ -990,7 +1014,7 @@ if not diag["bp_homocedastic"]:
         if n_obs > 5000 else ""
     )
     st.warning(
-        f"⚠️ **Indícios de heterocedasticidade detectados** "
+        f"**Indícios de heterocedasticidade detectados** "
         f"(Breusch-Pagan p {_p_fmt(diag['bp_pvalue'])}).{contexto_n} "
         f"A variância dos erros não é constante entre os grupos — os coeficientes "
         f"continuam não-viesados, mas os erros-padrão e p-valores podem estar subestimados. "
@@ -1001,7 +1025,7 @@ if not diag["bp_homocedastic"]:
 if not diag["shapiro_normal"]:
     if not diag.get("shapiro_confiavel", True):
         st.info(
-            f"ℹ️ **Leve desvio de normalidade nos resíduos** "
+            f"**Leve desvio de normalidade nos resíduos** "
             f"(Shapiro-Wilk p {_p_fmt(diag['shapiro_pvalue'])}, "
             f"avaliado em amostra de {sw_n:,} observações). "
             f"Com n = {n_obs:,}, o **Teorema Central do Limite** garante a "
@@ -1010,7 +1034,7 @@ if not diag["shapiro_normal"]:
         )
     else:
         st.warning(
-            f"⚠️ **Indícios de não-normalidade dos resíduos** "
+            f"**Indícios de não-normalidade dos resíduos** "
             f"(Shapiro-Wilk p {_p_fmt(diag['shapiro_pvalue'])}). "
             f"Os intervalos de confiança e p-valores podem estar afetados. "
             f"Verifique a presença de outliers ou considere transformação da variável dependente."
@@ -1018,7 +1042,7 @@ if not diag["shapiro_normal"]:
 
 if diag["shapiro_normal"] and diag["bp_homocedastic"]:
     st.success(
-        f"✅ **Todos os pressupostos verificados.** "
+        f"**Todos os pressupostos verificados.** "
         f"Resíduos normalmente distribuídos (Shapiro-Wilk p {_p_fmt(diag['shapiro_pvalue'])}) "
         f"e variância constante (Breusch-Pagan p {_p_fmt(diag['bp_pvalue'])}). "
         f"O modelo OLS é metodologicamente adequado para estes dados."
@@ -1071,7 +1095,7 @@ st.markdown(
     "cada um contribui para as diferenças entre os estudantes."
 )
 
-if st.button("▶ Ver Explicabilidade SHAP", type="primary", key="btn_shap"):
+if st.button("Ver Explicabilidade SHAP", type="primary", key="btn_shap"):
     st.session_state["shap_visivel"] = True
 
 if st.session_state.get("shap_visivel", False):
@@ -1101,7 +1125,7 @@ if st.session_state.get("shap_visivel", False):
         fig.update_traces(marker_line_width=0)
         st.plotly_chart(fig, use_container_width=True)
 
-        with st.expander("ℹ️ Como ler este gráfico?"):
+        with st.expander("Como ler este gráfico?"):
             st.markdown("""
 - **Barra maior** = esse fator faz mais diferença na nota entre os estudantes
 - O número indica, em média, **quantos pontos** são atribuíveis a cada fator
@@ -1126,7 +1150,7 @@ _metric_row([
 
 st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
-if st.button("📄 Gerar Relatório PDF", type="primary", key="btn_pdf"):
+if st.button("Gerar Relatório PDF", type="primary", key="btn_pdf"):
     with st.spinner("Gerando PDF..."):
         path = generate_report(
             session={
@@ -1146,10 +1170,10 @@ if st.button("📄 Gerar Relatório PDF", type="primary", key="btn_pdf"):
                 "plot_data":              get_residuals_plot_data(st.session_state.model_result),
             }
         )
-    st.success(f"✅ Relatório gerado: `{path.name}`")
+    st.success(f"Relatório gerado: `{path.name}`")
     with open(path, "rb") as f:
         st.download_button(
-            label="⬇️ Baixar PDF",
+            label="Baixar PDF",
             data=f,
             file_name=path.name,
             mime="application/pdf",

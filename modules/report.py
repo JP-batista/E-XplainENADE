@@ -5,6 +5,7 @@ Produz um relatório acessível para não-especialistas, com legendas,
 textos explicativos e linguagem clara em cada seção.
 """
 import io
+import platform
 import re
 from datetime import date
 from pathlib import Path
@@ -18,9 +19,15 @@ from fpdf import FPDF
 
 _OUTPUT_DIR = Path(__file__).parent.parent / "outputs"
 
-_ARIAL_REGULAR = Path("C:/Windows/Fonts/arial.ttf")
-_ARIAL_BOLD    = Path("C:/Windows/Fonts/arialbd.ttf")
-_USE_UNICODE   = _ARIAL_REGULAR.exists()
+# Fonte Unicode: Arial no Windows, Liberation Sans no Linux (Streamlit Cloud)
+if platform.system() == "Windows":
+    _FONT_REGULAR = Path("C:/Windows/Fonts/arial.ttf")
+    _FONT_BOLD    = Path("C:/Windows/Fonts/arialbd.ttf")
+else:
+    _FONT_REGULAR = Path("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf")
+    _FONT_BOLD    = Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf")
+
+_USE_UNICODE = _FONT_REGULAR.exists()
 
 # Paleta de cores
 _COR_AZUL    = (41,  98, 168)
@@ -40,8 +47,8 @@ class _PDF(FPDF):
     def __init__(self):
         super().__init__()
         if _USE_UNICODE:
-            self.add_font("Arial",  fname=str(_ARIAL_REGULAR))
-            self.add_font("Arial", style="B", fname=str(_ARIAL_BOLD))
+            self.add_font("Arial",  fname=str(_FONT_REGULAR))
+            self.add_font("Arial", style="B", fname=str(_FONT_BOLD))
             self._f = "Arial"
         else:
             self._f = "Helvetica"

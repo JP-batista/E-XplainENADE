@@ -1,9 +1,13 @@
-# Dados brutos (não versionar — arquivos grandes)
+# Dados brutos e gerados (não versionar — arquivos grandes)
 microdados_Enade_2021_LGPD/
 microdados2021_arq1.txt
+*.csv
+*.csv.gz
+outputs/
 
 # Documentação e arquivos do TCC (não versionar)
 TCC/
+Gerar CSV/
 
 # Configuração local do Claude Code e instruções
 .claude/

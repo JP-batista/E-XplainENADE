@@ -12,9 +12,9 @@ O E-XplainENADE permite que pesquisadores definam hipóteses sobre fatores que i
 
 - Modelo de regressão linear múltipla (OLS) com coeficientes, p-valores e IC 95%
 - Diagnóstico automático de multicolinearidade (VIF)
-- Testes formais de normalidade e homocedasticidade dos resíduos
-- Explicabilidade via SHAP (importância de cada fator)
-- Relatório técnico em PDF com interpretação automática em linguagem acessível
+- Testes formais de normalidade (Shapiro-Wilk) e homocedasticidade (Breusch-Pagan) dos resíduos
+- Explicabilidade via SHAP LinearExplainer (importância de cada fator)
+- Relatório técnico em PDF com interpretação automática em linguagem acadêmica
 
 A abordagem é **confirmatória**, não preditiva — o objetivo é testar hipóteses sobre relações entre variáveis socioeconômicas e desempenho acadêmico, o que exige p-valores, intervalos de confiança e testes de hipótese (statsmodels, não scikit-learn).
 
@@ -23,39 +23,39 @@ A abordagem é **confirmatória**, não preditiva — o objetivo é testar hipó
 ## Requisitos
 
 - Python 3.9+
-- Os microdados brutos do ENADE 2021 (INEP/LGPD) — **não incluídos no repositório**
-
-```
-microdados_Enade_2021_LGPD/
-  1.LEIA-ME/   ← dicionário de variáveis, questionários, manual
-  2.DADOS/     ← 43 arquivos .txt separados por ";"
-```
+- Os microdados brutos do ENADE 2021 (INEP/LGPD) para gerar o arquivo de dados — **não incluídos no repositório**
 
 ---
 
 ## Instalação
 
 ```bash
-# Clonar o repositório
 git clone https://github.com/JP-batista/E-XplainENADE.git
-
-# Instalar dependências
+cd E-XplainENADE
 pip install -r requirements.txt
 ```
 
 ---
 
-## Como rodar
+## Como rodar localmente
 
 ```bash
-# Verificar carregamento dos dados (primeira execução leva ~30s)
-python -c "from modules.loader import get_dataset; df = get_dataset(); print(df.shape)"
-
-# Iniciar a aplicação
 streamlit run app.py
 ```
 
-A aplicação abre no navegador em `http://localhost:8501`.
+A aplicação abre em `http://localhost:8501`. Na Etapa 1, faça upload do arquivo `.csv.gz` gerado.
+
+---
+
+## Deploy no Streamlit Cloud
+
+1. Faça push do repositório para o GitHub (sem os arquivos de dados — `.gitignore` já os exclui)
+2. Acesse [share.streamlit.io](https://share.streamlit.io) → "New app"
+3. Selecione o repositório e `app.py` como entry point
+4. O Streamlit Cloud instala automaticamente as dependências de `requirements.txt` e `packages.txt`
+5. Acesse a URL gerada e faça upload do `.csv.gz` na Etapa 1
+
+O `packages.txt` instala `fonts-liberation` (Liberation Sans, compatível com Arial) para geração correta do PDF no Linux.
 
 ---
 
@@ -65,39 +65,39 @@ A interface é uma **página única vertical** com 7 etapas que aparecem progres
 
 | Etapa | Descrição | Pré-requisito |
 |---|---|---|
-| 1 | Seleção de Base | — |
-| 2 | Definição da Hipótese (Y, X, interações) | Base carregada |
-| 3 | Modelagem OLS + Interpretação automática | Modelagem executada |
-| 4 | Multicolinearidade (VIF) | Modelagem executada |
-| 5 | Diagnóstico de Resíduos (Shapiro-Wilk + Breusch-Pagan) | Modelagem executada |
-| 6 | Explicabilidade SHAP | Modelagem executada |
-| 7 | Geração do Relatório PDF | Modelagem executada |
+| 1 | Upload do CSV + filtros de curso e tipo de IES | — |
+| 2 | Definição da hipótese: Y (nota), X (preditores), interações | Base carregada |
+| 3 | Coeficientes OLS, R², interpretação automática | Modelagem executada |
+| 4 | Diagnóstico de multicolinearidade (VIF) com remoção interativa | Modelagem executada |
+| 5 | Testes formais de resíduos + gráficos (resíduos vs preditos, QQ-plot) | Modelagem executada |
+| 6 | Importância dos fatores via SHAP LinearExplainer | Modelagem executada |
+| 7 | Geração e download do relatório técnico em PDF | Modelagem executada |
 
 ---
 
 ## Arquitetura
 
 ```
-app.py                      ← Camada 9: interface Streamlit (entry point)
+app.py                      — Camada 9: interface Streamlit (entry point)
 modules/
-  etl.py                    ← Camada 1: ingestão dos 43 arquivos  ← SWAP POINT
-  loader.py                 ← Camada 2: filtros, recodificação, renomeação
-  hypothesis.py             ← Camada 3: HypothesisConfig + to_formula()
-  modeling.py               ← Camada 4: statsmodels OLS
-  multicollinearity.py      ← Camada 5: VIF com retroalimentação interativa
-  residuals.py              ← Camada 6: Shapiro-Wilk + Breusch-Pagan
-  explainability.py         ← Camada 7: shap.LinearExplainer
-  report.py                 ← Camada 8: PDF via fpdf2
+  etl.py                    — Camada 1: ingestão dos 43 arquivos (SWAP POINT)
+  loader.py                 — Camada 2: filtros, recodificação, renomeação, get_dataset_from_csv()
+  hypothesis.py             — Camada 3: HypothesisConfig + to_formula()
+  modeling.py               — Camada 4: statsmodels OLS
+  multicollinearity.py      — Camada 5: VIF com retroalimentação interativa
+  residuals.py              — Camada 6: Shapiro-Wilk + Breusch-Pagan
+  explainability.py         — Camada 7: shap.LinearExplainer
+  report.py                 — Camada 8: PDF via fpdf2 (fonte cross-platform)
 config/
-  variable_map.py           ← mapeamento QE_I08 → QE_RENDA, labels PT-BR, tipos
-outputs/                    ← PDFs gerados pela aplicação
+  variable_map.py           — mapeamento QE_I08 → QE_RENDA, labels PT-BR, tipos
 .streamlit/
-  config.toml               ← tema claro, cor primária violeta
+  config.toml               — tema claro, cor primária violeta, limite de upload 500 MB
+packages.txt                — dependência de sistema para Streamlit Cloud (fonts-liberation)
 ```
 
-### Dados
+---
 
-Os 43 arquivos são **row-aligned**: a linha N de `arq1` corresponde à linha N de `arq2`, etc. O join é posicional — sem chave de estudante (removida por LGPD). O filtro por curso/região é aplicado durante o carregamento para evitar ler os ~500 MB completos.
+## Dados
 
 | Dado | Total |
 |---|---|
@@ -105,26 +105,23 @@ Os 43 arquivos são **row-aligned**: a linha N de `arq1` corresponde à linha N 
 | Participantes efetivos (TP_PRES = 555) | 355.095 |
 | Variáveis analíticas disponíveis | ~124 |
 
-Apenas participantes efetivos são carregados por padrão (`apenas_presentes=True`), pois estudantes ausentes não possuem notas e não podem integrar o modelo.
+Apenas participantes efetivos são carregados (`apenas_presentes=True`), pois estudantes ausentes não possuem notas e não podem integrar o modelo de regressão.
 
-### Variável `TP_CATEGAD_BIN`
-
-`CO_CATEGAD` (5 categorias nominais) é binarizada em `TP_CATEGAD_BIN` durante o pré-processamento: `{1,2,3} → 0` (Pública), `{4,5} → 1` (Privada). Usar CO_CATEGAD como preditora contínua seria metodologicamente incorreto.
+**Variável `TP_CATEGAD_BIN`:** `CO_CATEGAD` (5 categorias nominais) é binarizada em `TP_CATEGAD_BIN` durante o pré-processamento: `{1,2,3} → 0` (Pública), `{4,5} → 1` (Privada). Usar CO_CATEGAD como preditora contínua em OLS seria metodologicamente incorreto.
 
 ---
 
-## Dependências principais
+## Dependências Python
 
 | Biblioteca | Uso |
 |---|---|
 | `statsmodels` | Regressão OLS confirmatória (p-valores, IC, testes F) |
 | `shap` | LinearExplainer — explicabilidade dos coeficientes |
+| `patsy` | Reconstrói design matrix para SHAP com termos de interação |
 | `scipy` | Shapiro-Wilk, probplot |
-| `statsmodels.stats` | Breusch-Pagan, VIF |
-| `patsy` | Reconstrói design matrix para SHAP com interações |
-| `streamlit` | Interface web |
-| `fpdf2` | Geração do relatório PDF com fonte Arial (Unicode) |
+| `fpdf2` | Geração do relatório PDF |
 | `plotly` | Gráficos interativos (resíduos, QQ-plot, SHAP) |
+| `streamlit` | Interface web |
 
 ---
 
@@ -134,8 +131,8 @@ Cada sessão gera um **Exec-ID** único (UUID). A divisão treino/teste usa `ran
 
 ---
 
-## Dados brutos
+## Fonte dos dados
 
-Fonte: [INEP — Microdados ENADE 2021](https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos/microdados/enade)
+[INEP — Microdados ENADE 2021](https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos/microdados/enade)
 
-Os dados não são distribuídos neste repositório por restrições de tamanho e LGPD. Após download, extraia na raiz do projeto mantendo a estrutura de pastas original do INEP.
+Os dados não são distribuídos neste repositório.
