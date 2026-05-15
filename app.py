@@ -372,6 +372,7 @@ def _interpretar_vif(vif_table: pd.DataFrame) -> Tuple[str, str]:
 
 
 def _interpretar_residuos(diag: dict) -> str:
+    from modules.residuals import _SHAPIRO_MAX_N
     partes = []
     if diag["shapiro_normal"]:
         partes.append(
@@ -379,11 +380,11 @@ def _interpretar_residuos(diag: dict) -> str:
             "erros pequenos são mais comuns e erros grandes são raros. Isso é o esperado."
         )
     else:
-        nota = (" (avaliado em amostra de 5.000 estudantes)"
+        nota = (f" (avaliado em amostra de {_SHAPIRO_MAX_N:,} estudantes)"
                 if not diag.get("shapiro_confiavel", True) else "")
         partes.append(
             f"ℹ️ **Distribuição dos erros:** Os erros não seguem exatamente um padrão normal{nota}. "
-            f"Com mais de 5.000 observações, isso tem impacto pequeno na validade dos resultados."
+            f"Com mais de {_SHAPIRO_MAX_N:,} observações, isso tem impacto pequeno na validade dos resultados."
         )
     if diag["bp_homocedastic"]:
         partes.append(
@@ -393,7 +394,7 @@ def _interpretar_residuos(diag: dict) -> str:
     else:
         partes.append(
             f"⚠️ **Consistência dos erros:** O modelo erra mais para alguns grupos do que para outros "
-            f"(p = {diag['bp_pvalue']:.4f}). "
+            f"(p {_p_fmt(diag['bp_pvalue'])}). "
             f"Os intervalos de confiança podem ser menos precisos para grupos extremos."
         )
     return "\n\n".join(partes)

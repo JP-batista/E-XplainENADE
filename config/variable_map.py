@@ -118,7 +118,7 @@ VALUE_LABELS = {
         4: "Privada s/fins", 5: "Privada c/fins",
     },
     "TP_CATEGAD_BIN": {0: "Pública", 1: "Privada"},
-    "CO_GRUPO": {4004: "Ciência da Computação", 4006: "Sistemas de Informação"},
+    "CO_GRUPO": {4004: "Ciência da Computação", 4005: "Engenharia de Software", 4006: "Sistemas de Informação"},
     "CO_REGIAO": {1: "Norte", 2: "Nordeste", 3: "Sudeste", 4: "Sul", 5: "Centro-Oeste"},
     "TP_SEXO": {0: "Feminino", 1: "Masculino"},
     "QE_TIPO_EM": {1: "Escola Pública", 2: "Escola Privada"},

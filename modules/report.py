@@ -5,6 +5,7 @@ Produz um relatório acessível para não-especialistas, com legendas,
 textos explicativos e linguagem clara em cada seção.
 """
 import io
+import re
 from datetime import date
 from pathlib import Path
 from typing import Any, Dict
@@ -197,6 +198,65 @@ def _grafico_residuos(plot_data) -> plt.Figure:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Renderizador de texto com markdown simples para fpdf2
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _strip_inline(texto: str) -> str:
+    """Remove marcadores **negrito** inline, mantendo o texto."""
+    return re.sub(r'\*\*(.+?)\*\*', r'\1', texto)
+
+
+def _render_interpretacao(pdf, texto: str) -> None:
+    """
+    Renderiza o texto de interpretação automática com formatação nativa fpdf2.
+
+    Regras de parsing:
+      - Linha vazia          → espaço vertical
+      - Linha só com **...** → cabeçalho de seção (negrito azul)
+      - Linha começa com •   → bullet com indentação
+      - Demais linhas        → parágrafo normal
+    """
+    _AZUL_TEXTO  = (29,  78, 137)
+    _CINZA_TEXTO = (75,  85,  99)
+    _NORMAL      = (33,  37,  41)
+    _INDENT      = 6   # mm de indentação dos bullets
+
+    for linha in texto.split("\n"):
+        linha = linha.strip()
+
+        if not linha:
+            pdf.ln(3)
+            continue
+
+        # Cabeçalho de seção: toda a linha é **texto** ou **texto:**
+        if re.match(r'^\*\*.+\*\*:?$', linha):
+            header = _strip_inline(linha).rstrip(":")
+            pdf.set_font(pdf._f, "B", 10)
+            pdf.set_text_color(*_AZUL_TEXTO)
+            pdf.ln(1)
+            pdf.multi_cell(0, 6, header + ":", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(*_NORMAL)
+            pdf.set_font(pdf._f, "", 10)
+
+        # Bullet
+        elif linha.startswith("•"):
+            content = _strip_inline(linha[1:].strip())
+            pdf.set_font(pdf._f, "", 10)
+            pdf.set_text_color(*_NORMAL)
+            # Primeira célula invisível para indentação
+            pdf.cell(_INDENT)
+            pdf.multi_cell(0, 5.5, "•  " + content,
+                           new_x="LMARGIN", new_y="NEXT")
+
+        # Parágrafo normal
+        else:
+            content = _strip_inline(linha)
+            pdf.set_font(pdf._f, "", 10)
+            pdf.set_text_color(*_NORMAL)
+            pdf.multi_cell(0, 6, content, new_x="LMARGIN", new_y="NEXT")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Função pública
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -231,19 +291,6 @@ def generate_report(session: Dict[str, Any], filename: str = "relatorio.pdf") ->
     pdf.set_text_color(*_COR_TITULO)
     pdf.ln(6)
 
-    # Bloco de contexto
-    pdf.set_fill_color(*_COR_FUNDO)
-    pdf.set_font(pdf._f, size=9)
-    pdf.multi_cell(0, 6,
-        f"Exec-ID: {session.get('exec_id','N/A')}\n"
-        f"Variavel analisada: {y_label}\n"
-        f"Curso: {filtros.get('curso','Todos')}  |  "
-        f"Tipo de IES: {filtros.get('tipo_ies','Todas')}  |  "
-        f"Ano: {filtros.get('ano','2021')}\n"
-        f"Formula: {session.get('formula','N/A')}",
-        fill=True, new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(4)
-
     # ── 1. Poder explicativo ──────────────────────────────────────────────────
     metrics = session.get("model_metrics", {})
     if metrics:
@@ -255,18 +302,17 @@ def generate_report(session: Dict[str, Any], filename: str = "relatorio.pdf") ->
             "a realidade dos dados."
         )
 
-        # Métricas em linha
+        # Métricas em linha — y0 fixo para garantir alinhamento das três colunas
         r2_pct = f"{metrics['r2']*100:.1f}%"
         n      = f"{metrics['n_obs']:,}"
         r2adj  = f"{metrics['r2_adj']:.4f}"
 
-        pdf.set_xy(15, pdf.get_y())
-        pdf.metrica("Poder Explicativo (R2)", r2_pct, 60)
-        pdf.set_xy(75, pdf.get_y() - 15)
-        pdf.metrica("Estudantes Analisados", n, 60)
-        pdf.set_xy(135, pdf.get_y() - 15)
-        pdf.metrica("R2 Ajustado", r2adj, 60)
-        pdf.ln(22)
+        y0 = pdf.get_y()
+        pdf.set_xy(15,  y0); pdf.metrica("Poder Explicativo (R2)", r2_pct, 60)
+        pdf.set_xy(75,  y0); pdf.metrica("Estudantes Analisados",  n,      60)
+        pdf.set_xy(135, y0); pdf.metrica("R2 Ajustado",            r2adj,  60)
+        pdf.set_xy(15, y0 + 17)
+        pdf.ln(4)
 
         # A interpretacao completa e exibida apos a tabela de coeficientes (Secao 2)
 
@@ -327,18 +373,19 @@ def generate_report(session: Dict[str, Any], filename: str = "relatorio.pdf") ->
         # 2.2 Interpretação automática (formato TCC)
         interp = session.get("interpretacao_modelo", "")
         if interp:
-            pdf.titulo_secao("2.2", "Interpretacao Automatica dos Resultados")
-            clean = (
-                interp
-                .replace("**", "")
-                .replace("•", "-")
-                .replace("≥", ">=")
-                .replace("β", "B")
-                .replace("²", "2")
-                .replace("✅", "")
-                .replace("⚠️", "")
-            )
-            pdf.caixa_destaque(clean, (235, 245, 255))
+            pdf.ln(2)
+            # Cabeçalho da subseção com fundo azul claro
+            pdf.set_fill_color(235, 245, 255)
+            pdf.set_draw_color(196, 220, 255)
+            pdf.set_font(pdf._f, "B", 10)
+            pdf.set_text_color(*_COR_AZUL)
+            pdf.cell(0, 8, "  Interpretacao Automatica dos Resultados",
+                     fill=True, border=1, new_x="LMARGIN", new_y="NEXT")
+            pdf.set_draw_color(0, 0, 0)
+            pdf.set_text_color(*_COR_TITULO)
+            pdf.ln(3)
+            _render_interpretacao(pdf, interp)
+            pdf.ln(2)
 
     # ── 3. Correlação entre variáveis (VIF) ──────────────────────────────────
     vif = session.get("vif_table")
@@ -533,6 +580,27 @@ def generate_report(session: Dict[str, Any], filename: str = "relatorio.pdf") ->
             "altos e baixos nesta variavel.",
             new_x="LMARGIN", new_y="NEXT")
         pdf.set_text_color(*_COR_TITULO)
+
+    # ── Bloco de rastreabilidade (fim do relatório) ───────────────────────────
+    pdf.ln(6)
+    pdf.set_fill_color(*_COR_FUNDO)
+    pdf.set_draw_color(220, 220, 220)
+    pdf.set_font(pdf._f, "B", 8)
+    pdf.set_text_color(*_COR_CINZA)
+    pdf.cell(0, 6, "  Informacoes de rastreabilidade", fill=True, border=1,
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font(pdf._f, size=8)
+    pdf.set_fill_color(250, 250, 252)
+    pdf.multi_cell(0, 5,
+        f"  Exec-ID: {session.get('exec_id', 'N/A')}\n"
+        f"  Variavel analisada: {y_label}\n"
+        f"  Curso: {filtros.get('curso', 'Todos')}  |  "
+        f"Tipo de IES: {filtros.get('tipo_ies', 'Todas')}  |  "
+        f"Ano: {filtros.get('ano', '2021')}\n"
+        f"  Formula: {session.get('formula', 'N/A')}",
+        fill=True, border=1, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_draw_color(0, 0, 0)
+    pdf.set_text_color(*_COR_TITULO)
 
     # ── Rodapé com nota metodológica ─────────────────────────────────────────
     if not filtros:
