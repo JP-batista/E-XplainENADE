@@ -107,8 +107,14 @@ REVERSE_MAP = {v["code"]: k for k, v in VARIABLE_MAP.items()}
 
 # Código amigável → rótulo legível (usado na interpretação automática)
 CODE_TO_LABEL = {v["code"]: v["label"] for v in VARIABLE_MAP.values()}
-# Variável derivada (não existe nos arquivos brutos): binarização de CO_CATEGAD
-CODE_TO_LABEL["TP_CATEGAD_BIN"] = "Tipo de IES (Pública/Privada)"
+
+# Variáveis derivadas — criadas por _enrich() em loader.py, não existem nos arquivos brutos
+CODE_TO_LABEL["TP_CATEGAD_BIN"]    = "Tipo de IES (Pública/Privada)"
+CODE_TO_LABEL["QE_TIPO_EM_BIN"]    = "Tipo de Escola no EM (0=Pública, 1=Privada)"
+CODE_TO_LABEL["QE_ACAO_AFIRM_BIN"] = "Ingressou por Ação Afirmativa (0=Não, 1=Sim)"
+CODE_TO_LABEL["CO_TURNO_V"]        = "Turno: Vespertino (ref. Matutino)"
+CODE_TO_LABEL["CO_TURNO_N"]        = "Turno: Noturno (ref. Matutino)"
+CODE_TO_LABEL["CO_TURNO_I"]        = "Turno: Integral (ref. Matutino)"
 
 # Labels para valores categóricos — exibição na UI e no relatório
 VALUE_LABELS = {
@@ -117,12 +123,17 @@ VALUE_LABELS = {
         1: "Fed. Pública", 2: "Est. Pública", 3: "Mun. Pública",
         4: "Privada s/fins", 5: "Privada c/fins",
     },
-    "TP_CATEGAD_BIN": {0: "Pública", 1: "Privada"},
-    "CO_GRUPO": {4004: "Ciência da Computação", 4005: "Engenharia de Software", 4006: "Sistemas de Informação"},
-    "CO_REGIAO": {1: "Norte", 2: "Nordeste", 3: "Sudeste", 4: "Sul", 5: "Centro-Oeste"},
-    "TP_SEXO": {0: "Feminino", 1: "Masculino"},
+    "TP_CATEGAD_BIN":    {0: "Pública",  1: "Privada"},
+    "QE_TIPO_EM_BIN":    {0: "Pública",  1: "Privada"},
+    "QE_ACAO_AFIRM_BIN": {0: "Não",      1: "Sim (qualquer cota)"},
+    "CO_TURNO_V":        {0: "Não",      1: "Sim"},
+    "CO_TURNO_N":        {0: "Não",      1: "Sim"},
+    "CO_TURNO_I":        {0: "Não",      1: "Sim"},
+    "CO_GRUPO":   {4004: "Ciência da Computação", 4005: "Engenharia de Software", 4006: "Sistemas de Informação"},
+    "CO_REGIAO":  {1: "Norte", 2: "Nordeste", 3: "Sudeste", 4: "Sul", 5: "Centro-Oeste"},
+    "TP_SEXO":    {0: "Feminino", 1: "Masculino"},
+    "QE_FAM_SUPERIOR": {0: "Não", 1: "Sim"},
     "QE_TIPO_EM": {1: "Escola Pública", 2: "Escola Privada"},
-    "QE_FAM_SUPERIOR": {1: "Sim", 2: "Não"},
 }
 
 # Variáveis analiticamente mais relevantes para modelagem de desempenho CC/SI

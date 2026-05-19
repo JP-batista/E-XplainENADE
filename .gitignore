@@ -7,12 +7,13 @@ outputs/
 
 # Documentação e arquivos do TCC (não versionar)
 TCC/
-Gerar CSV/
+gerar_csv/
 
 # Configuração local do Claude Code e instruções
 .claude/
 CLAUDE.md
 DEVELOPMENT.md
+TCC_NOTAS.md
 
 # Python
 __pycache__/

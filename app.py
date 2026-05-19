@@ -182,17 +182,23 @@ Y_OPTS = {
 }
 
 X_OPTS = {
-    "Renda Familiar":                "QE_RENDA",
-    "Escolaridade da Mãe":           "QE_ESC_MAE",
-    "Escolaridade do Pai":           "QE_ESC_PAI",
-    "Tipo de Escola (EM)":           "QE_TIPO_EM",
-    "Horas de Estudo por Semana":    "QE_HORAS_ESTUDO",
-    "Situação de Trabalho":          "QE_TRABALHO",
-    "Familiar com Ens. Superior":    "QE_FAM_SUPERIOR",
-    "Sexo":                          "TP_SEXO",
-    "Turno da Graduação":            "CO_TURNO",
-    "Tipo de IES (Pública/Privada)": "TP_CATEGAD_BIN",
-    "Ingresso por Ação Afirmativa":  "QE_ACAO_AFIRM",
+    # Socioeconômicas — ordinais tratadas como contínuas (padrão em pesquisa educacional)
+    "Renda Familiar":                  "QE_RENDA",           # 1=até 1,5SM … 7=>30SM
+    "Escolaridade da Mãe":             "QE_ESC_MAE",         # 1=Nunca estudou … 6=Pós-grad.
+    "Escolaridade do Pai":             "QE_ESC_PAI",         # 1=Nunca estudou … 6=Pós-grad.
+    "Familiar com Ens. Superior":      "QE_FAM_SUPERIOR",    # 0=Não / 1=Sim
+    "Situação de Trabalho":            "QE_TRABALHO",        # 1=Não trabalha … 5=40h+
+    "Ação Afirmativa":                 "QE_ACAO_AFIRM_BIN",  # 0=Sem cota / 1=Qualquer cota
+    # Acadêmicas
+    "Horas de Estudo por Semana":      "QE_HORAS_ESTUDO",    # 1=Nenhuma … 5=>12h
+    "Tipo de Escola no EM":            "QE_TIPO_EM_BIN",     # 0=Pública / 1=Privada
+    # Demográficas
+    "Sexo":                            "TP_SEXO",            # 0=Feminino / 1=Masculino
+    # Institucionais — binárias e dummies de CO_TURNO (ref=Matutino)
+    "Tipo de IES (Pública/Privada)":   "TP_CATEGAD_BIN",     # 0=Pública / 1=Privada
+    "Turno: Vespertino (vs Matutino)": "CO_TURNO_V",         # 1=Vespertino vs Matutino
+    "Turno: Noturno (vs Matutino)":    "CO_TURNO_N",         # 1=Noturno vs Matutino
+    "Turno: Integral (vs Matutino)":   "CO_TURNO_I",         # 1=Integral vs Matutino
 }
 CODE_TO_UI_LABEL = {v: k for k, v in X_OPTS.items()}
 CODE_TO_UI_LABEL.update({v: k for k, v in Y_OPTS.items()})
@@ -212,13 +218,12 @@ X_CATEGORIAS = {
         "pill": "pill-blue",
         "vars": [
             "Renda Familiar", "Escolaridade da Mãe", "Escolaridade do Pai",
-            "Familiar com Ens. Superior", "Situação de Trabalho",
-            "Ingresso por Ação Afirmativa",
+            "Familiar com Ens. Superior", "Situação de Trabalho", "Ação Afirmativa",
         ],
     },
     "Acadêmicas": {
         "pill": "pill-green",
-        "vars": ["Horas de Estudo por Semana", "Tipo de Escola (EM)"],
+        "vars": ["Horas de Estudo por Semana", "Tipo de Escola no EM"],
     },
     "Demográficas": {
         "pill": "pill-fuchsia",
@@ -226,7 +231,12 @@ X_CATEGORIAS = {
     },
     "Institucionais": {
         "pill": "pill-amber",
-        "vars": ["Turno da Graduação", "Tipo de IES (Pública/Privada)"],
+        "vars": [
+            "Tipo de IES (Pública/Privada)",
+            "Turno: Vespertino (vs Matutino)",
+            "Turno: Noturno (vs Matutino)",
+            "Turno: Integral (vs Matutino)",
+        ],
     },
 }
 
@@ -239,8 +249,6 @@ def _n_vars_analiticas(df: pd.DataFrame) -> int:
 
 DEFAULT_X = ["Renda Familiar", "Escolaridade da Mãe", "Horas de Estudo por Semana"]
 
-# ── Cache de dados ────────────────────────────────────────────────────────────
-@st.cache_data(show_spinner=False)
 def _carregar_dados_csv(uploaded_file, grupos_tuple, ies_filter_tuple):
     """Carrega dataset a partir de um CSV gerado por gerar_csv.py."""
     grupos     = list(grupos_tuple)     if grupos_tuple     else None
@@ -788,7 +796,7 @@ if st.button("Executar Modelagem", type="primary", disabled=(len(x_vars) == 0)):
             except Exception:
                 r2_test = float("nan")
 
-            vif_table = compute_vif(df, x_vars)
+            vif_table = compute_vif(df, x_vars, formula=hyp.to_formula())
             diag      = run_diagnostics(result)
             shap_vals, feat_names = compute_shap(result, df, x_vars)
             shap_sum  = get_shap_summary(shap_vals, feat_names)
@@ -931,7 +939,7 @@ else:
             result     = fit_ols(new_hyp, df)
             m          = get_model_metrics(result)
             ct         = get_coefficients_table(result)
-            vt         = compute_vif(df, new_x)
+            vt         = compute_vif(df, new_x, formula=new_hyp.to_formula())
             dg         = run_diagnostics(result)
             sv, fn     = compute_shap(result, df, new_x)
             ss         = get_shap_summary(sv, fn)

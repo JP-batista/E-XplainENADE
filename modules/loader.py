@@ -83,22 +83,62 @@ def _rename_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df.rename(columns=rename)
 
 
+def _enrich(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Deriva variáveis analíticas para uso correto em OLS.
+    Chamado internamente por preprocess() após renomeação de colunas.
+
+    Correções de convenção:
+      QE_FAM_SUPERIOR  1=Sim/2=Não  →  1=Sim/0=Não
+      QE_TIPO_EM       1=Pública/2=Privada  →  QE_TIPO_EM_BIN: 0=Pública/1=Privada
+
+    Variáveis nominais → binárias/dummies:
+      QE_ACAO_AFIRM    nominal (A-E)  →  QE_ACAO_AFIRM_BIN: 0=Sem cota/1=Qualquer cota
+      CO_TURNO         nominal (1-4)  →  3 dummies (ref=Matutino):
+                                          CO_TURNO_V (Vespertino)
+                                          CO_TURNO_N (Noturno)
+                                          CO_TURNO_I (Integral)
+    """
+    # QE_FAM_SUPERIOR: ENADE codifica 1=Sim, 2=Não — convenção inversa à binária padrão
+    if "QE_FAM_SUPERIOR" in df.columns:
+        df["QE_FAM_SUPERIOR"] = df["QE_FAM_SUPERIOR"].map({1: 1, 2: 0})
+
+    # QE_TIPO_EM: 1=Escola Pública → 0, 2=Escola Privada → 1
+    if "QE_TIPO_EM" in df.columns:
+        df["QE_TIPO_EM_BIN"] = df["QE_TIPO_EM"].map({1: 0, 2: 1})
+
+    # QE_ACAO_AFIRM: 1=Sem cota → 0; 2-5=alguma cota (racial/escola/socioecon./def.) → 1
+    if "QE_ACAO_AFIRM" in df.columns:
+        _a = pd.to_numeric(df["QE_ACAO_AFIRM"], errors="coerce")
+        df["QE_ACAO_AFIRM_BIN"] = _a.where(_a.isna(), (_a > 1).astype("float64"))
+
+    # CO_TURNO dummies — referência: Matutino (1), categoria mais comum em CC/SI
+    if "CO_TURNO" in df.columns:
+        _t = pd.to_numeric(df["CO_TURNO"], errors="coerce")
+        _na = _t.isna()
+        df["CO_TURNO_V"] = _t.where(_na, (_t == 2).astype("float64"))
+        df["CO_TURNO_N"] = _t.where(_na, (_t == 3).astype("float64"))
+        df["CO_TURNO_I"] = _t.where(_na, (_t == 4).astype("float64"))
+
+    return df
+
+
 def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Aplica recodificação, conversão de tipos e renomeação de colunas.
-    Entrada: DataFrame bruto de etl.load_raw().
-    Saída: DataFrame tipado com nomes amigáveis, pronto para modelagem.
+    Aplica recodificação, conversão de tipos, renomeação e enriquecimento analítico.
+    Entrada: DataFrame bruto de etl.load_raw() ou pd.read_csv().
+    Saída: DataFrame tipado, nomes amigáveis e variáveis derivadas, pronto para OLS.
+    Nota: opera in-place (sem df.copy()) para economizar memória.
     """
-    df = df.copy()
     df = _recode_questionnaire(df)
     df = _convert_types(df)
     df = _rename_columns(df)
     # CO_CATEGAD (nominal 1-5) binarizado: 1/2/3=Pública→0, 4/5=Privada→1
-    # Uso como preditora contínua seria metodologicamente incorreto (não há ordenamento real)
     if "CO_CATEGAD" in df.columns:
         df["TP_CATEGAD_BIN"] = df["CO_CATEGAD"].map(
             {1: 0, 2: 0, 3: 0, 4: 1, 5: 1}
         )
+    df = _enrich(df)
     return df
 
 
