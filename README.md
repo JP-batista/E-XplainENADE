@@ -43,17 +43,31 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-A aplicação abre em `http://localhost:8501`. Na Etapa 1, faça upload do arquivo `.csv.gz` gerado.
+A aplicação abre em `http://localhost:8501`. Os dados do recorte do TCC já fazem
+parte do sistema (`dados/enade_2021_nne_ccsi.csv.gz` — versionado no repositório);
+na Etapa 1 basta escolher os filtros e clicar em **Carregar Base**.
+
+### Regenerar a base do recorte (opcional)
+
+O arquivo embutido é gerado de forma reprodutível a partir dos microdados brutos
+do INEP (43 arquivos `.txt`, não distribuídos no repositório):
+
+```bash
+python gerar_dados.py
+```
+
+Recorte aplicado: ENADE **2021** · regiões **Norte + Nordeste** (CO_REGIAO_CURSO 1, 2) ·
+cursos **CC + SI** (CO_GRUPO 4004, 4006) · apenas **presentes** (TP_PRES = 555) →
+**5.114 estudantes**, 157 colunas brutas (~0,4 MB comprimido).
 
 ---
 
 ## Deploy no Streamlit Cloud
 
-1. Faça push do repositório para o GitHub (sem os arquivos de dados — `.gitignore` já os exclui)
+1. Faça push do repositório para o GitHub (a base do recorte em `dados/` é versionada; os microdados brutos não)
 2. Acesse [share.streamlit.io](https://share.streamlit.io) → "New app"
 3. Selecione o repositório e `app.py` como entry point
 4. O Streamlit Cloud instala automaticamente as dependências de `requirements.txt` e `packages.txt`
-5. Acesse a URL gerada e faça upload do `.csv.gz` na Etapa 1
 
 O `packages.txt` instala `fonts-liberation` (Liberation Sans, compatível com Arial) para geração correta do PDF no Linux.
 
@@ -65,7 +79,7 @@ A interface é uma **página única vertical** com 7 etapas que aparecem progres
 
 | Etapa | Descrição | Pré-requisito |
 |---|---|---|
-| 1 | Upload do CSV + filtros de curso e tipo de IES | — |
+| 1 | Seleção de base: filtros de curso e tipo de IES sobre a base embutida | — |
 | 2 | Definição da hipótese: Y (nota), X (preditores), interações | Base carregada |
 | 3 | Coeficientes OLS, R², interpretação automática | Modelagem executada |
 | 4 | Diagnóstico de multicolinearidade (VIF) com remoção interativa | Modelagem executada |
@@ -101,8 +115,9 @@ packages.txt                — dependência de sistema para Streamlit Cloud (fo
 
 | Dado | Total |
 |---|---|
-| Inscritos no ENADE 2021 | 489.866 |
-| Participantes efetivos (TP_PRES = 555) | 355.095 |
+| Inscritos no ENADE 2021 (nacional) | 489.866 |
+| Recorte do TCC: N+NE · CC+SI (antes do filtro de presença) | 6.303 |
+| **Base embutida** (presentes, TP_PRES = 555) | **5.114** |
 | Variáveis analíticas disponíveis | ~124 |
 
 Apenas participantes efetivos são carregados (`apenas_presentes=True`), pois estudantes ausentes não possuem notas e não podem integrar o modelo de regressão.
@@ -127,7 +142,10 @@ Apenas participantes efetivos são carregados (`apenas_presentes=True`), pois es
 
 ## Reprodutibilidade
 
-Cada sessão gera um **Exec-ID** único (UUID). A divisão treino/teste usa `random_state=42`. O Shapiro-Wilk com n > 5.000 amostra exatamente 5.000 observações com `seed=42`. Esses parâmetros garantem que os resultados sejam reprodutíveis dado o mesmo conjunto de dados e hipótese.
+- A base embutida é gerada de forma determinística por `gerar_dados.py` e versionada no git — todos analisam exatamente os mesmos dados.
+- O modelo OLS é ajustado na **base completa do recorte** (abordagem confirmatória — inferência via p-valores e IC 95%) e é determinístico: mesma hipótese → mesmos coeficientes.
+- O Shapiro-Wilk com n > 5.000 amostra exatamente 5.000 observações com `seed=42`.
+- Cada sessão gera um **Exec-ID** único (UUID), gravado no relatório PDF (`relatorio_<exec-id>.pdf`) e no registro de configuração exportável (`config_<exec-id>.json`) — que contém fórmula, variáveis, interações, filtros e seed, suficiente para replicar a análise.
 
 ---
 
@@ -135,4 +153,5 @@ Cada sessão gera um **Exec-ID** único (UUID). A divisão treino/teste usa `ran
 
 [INEP — Microdados ENADE 2021](https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos/microdados/enade)
 
-Os dados não são distribuídos neste repositório.
+Os microdados brutos completos não são distribuídos neste repositório — apenas o
+subconjunto do recorte do TCC (dados públicos e anonimizados pelo INEP, versão LGPD).

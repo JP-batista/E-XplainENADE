@@ -6,12 +6,17 @@ um DataFrame padronizado, com tipos corretos e colunas renomeadas, pronto para m
 Esta camada permanece estável mesmo quando a fonte de dados mudar
 (o SWAP POINT está em etl.py, ou via get_dataset_from_csv() para upload).
 """
+from pathlib import Path
 from typing import IO, List, Optional, Union
 
 import pandas as pd
 
 from modules import etl
 from config.variable_map import VARIABLE_MAP
+
+# Base embutida do recorte do TCC (2021 · Norte+Nordeste · CC+SI · presentes).
+# Gerada por gerar_dados.py — colunas brutas; o preprocess() é aplicado na carga.
+DATA_FILE = Path(__file__).parent.parent / "dados" / "enade_2021_nne_ccsi.csv.gz"
 
 # Mapeamento letra → inteiro para QE_I01–QE_I26 (A-E/F/G/H conforme a questão)
 _LETTER_TO_INT = {chr(65 + i): i + 1 for i in range(26)}  # A=1 … Z=26
@@ -219,3 +224,32 @@ def get_dataset_from_csv(
         df = df[df["TP_PRES"] == 555].reset_index(drop=True)
 
     return df
+
+
+def get_default_dataset(
+    grupos: Optional[List[int]] = None,
+    ies_filter: Optional[List[int]] = None,
+) -> pd.DataFrame:
+    """
+    Carrega a base embutida do recorte do TCC (DATA_FILE) e aplica os filtros
+    da interface. É o ponto de entrada usado pelo app.py — o usuário não envia
+    arquivo; os dados já fazem parte do sistema (conforme Etapa 1 da spec).
+
+    Parameters
+    ----------
+    grupos : list[int], optional
+        CO_GRUPO a incluir (ex: [4004]). None = todos os cursos do recorte.
+    ies_filter : list[int], optional
+        CO_CATEGAD a incluir. None = todos os tipos de IES.
+
+    Raises
+    ------
+    FileNotFoundError
+        Se a base ainda não foi gerada (rodar: python gerar_dados.py).
+    """
+    if not DATA_FILE.exists():
+        raise FileNotFoundError(
+            f"Base de dados não encontrada: {DATA_FILE}\n"
+            "Gere-a a partir dos microdados brutos com: python gerar_dados.py"
+        )
+    return get_dataset_from_csv(DATA_FILE, grupos=grupos, ies_filter=ies_filter)

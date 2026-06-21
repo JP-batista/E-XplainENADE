@@ -7,6 +7,7 @@ Cada seção aparece progressivamente conforme os pré-requisitos são atendidos
   - Etapa 2: aparece após base carregada
   - Etapas 3–7: aparecem após modelagem executada
 """
+import json
 import uuid
 import itertools
 from typing import List, Tuple
@@ -205,10 +206,10 @@ CODE_TO_UI_LABEL.update({v: k for k, v in Y_OPTS.items()})
 
 ANOS_OPTS = {"2021": True, "2019": False, "2018": False, "2017": False}
 
+# Cursos do recorte fixo do TCC (a base embutida contém apenas CC + SI)
 CURSO_OPTS = {
-    "Todos":                    None,
+    "Todos (CC + SI)":          None,
     "Ciência da Computação":    [4004],
-    "Engenharia de Software":   [4005],
     "Sistemas de Informação":   [4006],
 }
 IES_OPTS = {"Todas": None, "Pública": [1, 2, 3], "Privada": [4, 5]}
@@ -249,15 +250,12 @@ def _n_vars_analiticas(df: pd.DataFrame) -> int:
 
 DEFAULT_X = ["Renda Familiar", "Escolaridade da Mãe", "Horas de Estudo por Semana"]
 
-def _carregar_dados_csv(uploaded_file, grupos_tuple, ies_filter_tuple):
-    """Carrega dataset a partir de um CSV gerado por gerar_csv.py."""
+@st.cache_data(show_spinner=False)
+def _carregar_dados(grupos_tuple, ies_filter_tuple):
+    """Carrega a base embutida do recorte (dados/) aplicando os filtros da UI."""
     grupos     = list(grupos_tuple)     if grupos_tuple     else None
     ies_filter = list(ies_filter_tuple) if ies_filter_tuple else None
-    return loader.get_dataset_from_csv(
-        uploaded_file,
-        grupos=grupos,
-        ies_filter=ies_filter,
-    )
+    return loader.get_default_dataset(grupos=grupos, ies_filter=ies_filter)
 
 
 # ── Exec-ID da sessão ─────────────────────────────────────────────────────────
@@ -573,17 +571,27 @@ st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 # ETAPA 1 — Seleção de Base  (sempre visível)
 # ══════════════════════════════════════════════════════════════════════════════
 _etapa_header(1, "Seleção de Base",
-              "Envie o arquivo CSV e escolha o recorte a ser analisado")
+              "Escolha o recorte a ser analisado — os dados já fazem parte do sistema")
 
-# ── Upload do CSV ─────────────────────────────────────────────────────────────
+# ── Base embutida ─────────────────────────────────────────────────────────────
+if not loader.DATA_FILE.exists():
+    st.error(
+        "**Base de dados não encontrada** em `dados/enade_2021_nne_ccsi.csv.gz`.\n\n"
+        "Gere-a a partir dos microdados brutos do INEP com:\n\n"
+        "```\npython gerar_dados.py\n```"
+    )
+    st.stop()
+
 with st.container(border=True):
-    st.markdown('<div class="exn-filter-label">Arquivo de dados — ENADE 2021</div>',
+    st.markdown('<div class="exn-filter-label">Base de dados embutida</div>',
                 unsafe_allow_html=True)
-    csv_upload = st.file_uploader(
-        "Selecione o CSV",
-        type=["csv", "gz"],
-        label_visibility="collapsed",
-        help="Gere o arquivo localmente com: python gerar_csv.py",
+    st.markdown(
+        "**Microdados ENADE 2021 (INEP/LGPD)** · Regiões Norte + Nordeste · "
+        "Ciência da Computação + Sistemas de Informação · apenas presentes (TP_PRES = 555)"
+    )
+    st.caption(
+        "Arquivo: `dados/enade_2021_nne_ccsi.csv.gz` — recorte fixo do TCC, "
+        "gerado de forma reprodutível por `gerar_dados.py`."
     )
 
 st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
@@ -604,8 +612,6 @@ with col2:
         st.markdown('<div class="exn-filter-label">Curso</div>', unsafe_allow_html=True)
         curso_sel = st.radio("Curso", options=list(CURSO_OPTS.keys()),
                              label_visibility="collapsed")
-        if curso_sel == "Engenharia de Software":
-            st.caption("Poucos registros no ENADE 2021.")
 
 with col3:
     with st.container(border=True):
@@ -617,16 +623,13 @@ st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
 # ── Carregar ──────────────────────────────────────────────────────────────────
 ano_ok = ANOS_OPTS[ano_sel]
-btn_disabled = (not ano_ok) or (csv_upload is None)
-btn_label = "Carregar Base" if csv_upload is not None else "Selecione um arquivo CSV acima"
 
-if st.button(btn_label, type="primary", disabled=btn_disabled):
+if st.button("Carregar Base", type="primary", disabled=not ano_ok):
     grupos     = CURSO_OPTS[curso_sel]
     ies_filter = IES_OPTS[ies_sel]
 
-    with st.spinner("Processando dados (pode levar alguns segundos)..."):
-        df = _carregar_dados_csv(
-            csv_upload,
+    with st.spinner("Aplicando filtros à base do recorte..."):
+        df = _carregar_dados(
             tuple(grupos) if grupos else (),
             tuple(ies_filter) if ies_filter else (),
         )
@@ -638,8 +641,7 @@ if st.button(btn_label, type="primary", disabled=btn_disabled):
     }
     for k in ["model_result", "model_metrics", "coef_table", "vif_table",
               "residuals_diag", "shap_values", "shap_summary", "hypothesis",
-              "formula", "y_label", "r2_test", "n_treino", "n_teste",
-              "config", "shap_visivel"]:
+              "formula", "y_label", "config", "shap_visivel"]:
         st.session_state.pop(k, None)
 
 if not ano_ok:
@@ -777,29 +779,17 @@ if x_vars:
 if st.button("Executar Modelagem", type="primary", disabled=(len(x_vars) == 0)):
     hyp = build_hypothesis(y_var, x_vars, interactions, df)
     try:
-        with st.spinner("Divisão treino/teste → OLS → VIF → resíduos → SHAP…"):
-            df_train = df.sample(frac=0.8, random_state=42)
-            df_test  = df.drop(df_train.index)
-
+        # Abordagem confirmatória: o OLS é ajustado na base completa do recorte.
+        # Não há divisão treino/teste — a inferência (p-valores, IC 95%) usa
+        # todas as observações, como é padrão em modelagem estatística inferencial.
+        with st.spinner("OLS → VIF → resíduos → SHAP…"):
             result     = fit_ols(hyp, df)
             metrics    = get_model_metrics(result)
             coef_table = get_coefficients_table(result)
-
-            try:
-                y_pred = result.predict(df_test)
-                y_real = df_test[hyp.y].dropna()
-                y_pred = y_pred.reindex(y_real.index).dropna()
-                y_real = y_real.reindex(y_pred.index)
-                ss_res = ((y_real - y_pred) ** 2).sum()
-                ss_tot = ((y_real - y_real.mean()) ** 2).sum()
-                r2_test = float(1 - ss_res / ss_tot) if ss_tot > 0 else float("nan")
-            except Exception:
-                r2_test = float("nan")
-
-            vif_table = compute_vif(df, x_vars, formula=hyp.to_formula())
-            diag      = run_diagnostics(result)
+            vif_table  = compute_vif(df, x_vars, formula=hyp.to_formula())
+            diag       = run_diagnostics(result)
             shap_vals, feat_names = compute_shap(result, df, x_vars)
-            shap_sum  = get_shap_summary(shap_vals, feat_names)
+            shap_sum   = get_shap_summary(shap_vals, feat_names)
 
     except Exception as e:
         st.error(
@@ -821,14 +811,16 @@ if st.button("Executar Modelagem", type="primary", disabled=(len(x_vars) == 0)):
         "residuals_diag": diag,
         "shap_values":    shap_vals,
         "shap_summary":   shap_sum,
-        "r2_test":        round(r2_test, 4),
-        "n_treino":       len(df_train),
-        "n_teste":        len(df_test),
         "shap_visivel":   False,
         "config": {
-            "exec_id": st.session_state.exec_id,
-            "formula": hyp.to_formula(),
-            "filtros": st.session_state.get("filtros", {}),
+            "exec_id":      st.session_state.exec_id,
+            "seed":         42,
+            "fonte_dados":  "dados/enade_2021_nne_ccsi.csv.gz",
+            "y":            hyp.y,
+            "x_vars":       hyp.x_vars,
+            "interactions": [list(par) for par in hyp.interactions],
+            "formula":      hyp.to_formula(),
+            "filtros":      st.session_state.get("filtros", {}),
         },
     })
     st.success("Modelagem concluída! Os resultados aparecem abaixo.")
@@ -849,22 +841,17 @@ y_label    = st.session_state.get("y_label", "Nota Geral")
 vif        = st.session_state.vif_table
 diag       = st.session_state.residuals_diag
 shap_sum   = st.session_state.shap_summary
-r2_test    = st.session_state.get("r2_test", None)
-n_treino   = st.session_state.get("n_treino", metrics["n_obs"])
-n_teste    = st.session_state.get("n_teste", 0)
 
 # ── 3. Modelagem e Diagnóstico ────────────────────────────────────────────────
 _section_divider()
 _etapa_header(3, "Modelagem e Diagnóstico",
               "Coeficientes OLS, poder explicativo e interpretação automática")
 
-r2_test_str = (f"{r2_test*100:.1f}%"
-               if (r2_test is not None and r2_test == r2_test) else "N/A")
 _metric_row([
-    (f"{metrics['r2']*100:.1f}%",   f"Poder Explicativo (R²) — {y_label}", "dark"),
-    (f"{metrics['r2_adj']:.4f}",    "R² Ajustado",                          "violet"),
-    (r2_test_str,                   "R² no Conjunto de Teste (20%)",         "blue"),
-    (f"{n_treino:,} / {n_teste:,}", "Treino / Teste (80/20)",                "slate"),
+    (f"{metrics['r2']*100:.1f}%",  f"Poder Explicativo (R²) — {y_label}",   "dark"),
+    (f"{metrics['r2_adj']:.4f}",   "R² Ajustado",                            "violet"),
+    (f"p {_p_fmt(metrics['f_pvalue'])}", "Significância Global (Teste F)",   "blue"),
+    (f"{metrics['n_obs']:,}",      "Estudantes no Modelo (N)",               "slate"),
 ])
 
 st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
@@ -1158,12 +1145,34 @@ _metric_row([
 
 st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
-if st.button("Gerar Relatório PDF", type="primary", key="btn_pdf"):
+# ── Registro de configuração (.json) — reprodutibilidade ─────────────────────
+config_atual = st.session_state.get("config", {})
+config_json = json.dumps(config_atual, ensure_ascii=False, indent=2)
+
+col_pdf, col_cfg = st.columns(2, gap="medium")
+
+with col_cfg:
+    st.download_button(
+        label="Baixar Configuração (.json)",
+        data=config_json,
+        file_name=f"config_{st.session_state.exec_id[:8]}.json",
+        mime="application/json",
+        key="btn_download_config",
+        help="Registro completo da execução: Exec-ID, seed, fórmula, variáveis, "
+             "interações e filtros — suficiente para replicar esta análise.",
+        use_container_width=True,
+    )
+
+with col_pdf:
+    gerar_pdf = st.button("Gerar Relatório PDF", type="primary", key="btn_pdf",
+                          use_container_width=True)
+
+if gerar_pdf:
     with st.spinner("Gerando PDF..."):
         path = generate_report(
             session={
                 "exec_id":                st.session_state.exec_id,
-                "config":                 st.session_state.get("config", {}),
+                "config":                 config_atual,
                 "formula":                st.session_state.get("formula", ""),
                 "model_metrics":          metrics,
                 "coef_table":             coef_table,
@@ -1176,7 +1185,8 @@ if st.button("Gerar Relatório PDF", type="primary", key="btn_pdf"):
                 "interpretacao_residuos": _interpretar_residuos(diag),
                 "interpretacao_shap":     _interpretar_shap(shap_sum, y_label),
                 "plot_data":              get_residuals_plot_data(st.session_state.model_result),
-            }
+            },
+            filename=f"relatorio_{st.session_state.exec_id[:8]}.pdf",
         )
     st.success(f"Relatório gerado: `{path.name}`")
     with open(path, "rb") as f:

@@ -26,14 +26,15 @@ _LOAD_ORDER = (
 )
 
 
-def _read_arq(n: int) -> pd.DataFrame:
-    path = _RAW_DIR / f"microdados2021_arq{n}.txt"
+def _read_arq(n: int, raw_dir: Path) -> pd.DataFrame:
+    path = raw_dir / f"microdados2021_arq{n}.txt"
     return pd.read_csv(path, sep=";", dtype=str, encoding="latin-1")
 
 
 def load_raw(
     grupos: Optional[List[int]] = None,
     regioes: Optional[List[int]] = None,
+    raw_dir: Optional[Path] = None,
 ) -> pd.DataFrame:
     """
     Lê os 43 arquivos row-aligned do ENADE 2021, une por posição e retorna
@@ -49,13 +50,16 @@ def load_raw(
         Valores de CO_GRUPO a incluir (ex: [4004, 4006] para CC + SI).
     regioes : list[int], optional
         Valores de CO_REGIAO_CURSO a incluir (ex: [1, 2] para Norte + Nordeste).
+    raw_dir : Path, optional
+        Pasta com os 43 arquivos microdados2021_arq*.txt. Padrão: _RAW_DIR.
 
     Returns
     -------
     pd.DataFrame
         DataFrame bruto com todas as colunas, sem recodificação de tipos.
     """
-    base = _read_arq(1)
+    raw_dir = Path(raw_dir) if raw_dir is not None else _RAW_DIR
+    base = _read_arq(1, raw_dir)
 
     mask = pd.Series([True] * len(base), index=base.index)
     if grupos:
@@ -66,7 +70,7 @@ def load_raw(
     parts = [base[mask].reset_index(drop=True)]
 
     for n in _LOAD_ORDER[1:]:
-        df = _read_arq(n)
+        df = _read_arq(n, raw_dir)
         parts.append(
             df[mask].reset_index(drop=True).drop(columns=["NU_ANO", "CO_CURSO"])
         )

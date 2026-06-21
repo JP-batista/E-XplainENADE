@@ -5,6 +5,10 @@ microdados2021_arq1.txt
 *.csv.gz
 outputs/
 
+# Exceção: base embutida do recorte do TCC (pequena — VERSIONADA)
+# Gerada por gerar_dados.py · 2021 · Norte+Nordeste · CC+SI · presentes
+!dados/*.csv.gz
+
 # Documentação e arquivos do TCC (não versionar)
 TCC/
 gerar_csv/
@@ -14,6 +18,7 @@ gerar_csv/
 CLAUDE.md
 DEVELOPMENT.md
 TCC_NOTAS.md
+REVISAO_LITERATURA.md
 
 # Python
 __pycache__/

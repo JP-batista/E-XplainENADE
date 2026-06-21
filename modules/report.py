@@ -588,6 +588,35 @@ def generate_report(session: Dict[str, Any], filename: str = "relatorio.pdf") ->
             new_x="LMARGIN", new_y="NEXT")
         pdf.set_text_color(*_COR_TITULO)
 
+    # ── 6. Limitações da análise ──────────────────────────────────────────────
+    pdf.titulo_secao("6", "Limitacoes da Analise")
+
+    pdf.caixa_contexto(
+        "Toda analise estatistica tem limites de validade. Os pontos abaixo "
+        "delimitam o alcance das conclusoes deste relatorio."
+    )
+
+    limitacoes = [
+        "Associacao nao e causalidade: os coeficientes indicam relacoes "
+        "estatisticas entre variaveis, nao efeitos causais comprovados.",
+        "Modelo linear: o OLS captura relacoes lineares; efeitos nao-lineares "
+        "ou de limiar nao sao representados.",
+        "Recorte especifico: ENADE 2021, regioes Norte e Nordeste, cursos de "
+        "Ciencia da Computacao e Sistemas de Informacao — generalizacoes para "
+        "outros anos, regioes ou cursos exigem cautela.",
+        "Variaveis omitidas: fatores nao incluidos no modelo (ex: qualidade da "
+        "IES, trajetoria escolar previa) podem influenciar os resultados.",
+        "Variaveis ordinais (renda, escolaridade, horas de estudo) foram "
+        "tratadas como continuas, convencao aceita em pesquisa educacional, "
+        "mas que assume intervalos equivalentes entre niveis.",
+    ]
+    pdf.set_font(pdf._f, "", 10)
+    pdf.set_text_color(*_COR_TITULO)
+    for item in limitacoes:
+        pdf.cell(6)
+        pdf.multi_cell(0, 5.5, "-  " + item, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(1)
+
     # ── Bloco de rastreabilidade (fim do relatório) ───────────────────────────
     pdf.ln(6)
     pdf.set_fill_color(*_COR_FUNDO)
@@ -611,15 +640,15 @@ def generate_report(session: Dict[str, Any], filename: str = "relatorio.pdf") ->
 
     # ── Rodapé com nota metodológica ─────────────────────────────────────────
     if not filtros:
-        filtro_desc = "conforme filtros selecionados na interface"
+        filtro_desc = "recorte Norte+Nordeste, CC+SI, conforme filtros da interface"
     else:
         curso_txt = filtros.get("curso", "")
         ies_txt   = filtros.get("tipo_ies", "")
         ano_txt   = filtros.get("ano", "2021")
-        partes = []
+        partes = ["regioes Norte e Nordeste"]
         partes.append(
-            f"curso: {curso_txt}" if curso_txt and curso_txt != "Todos"
-            else "todos os cursos"
+            f"curso: {curso_txt}" if curso_txt and not curso_txt.startswith("Todos")
+            else "cursos CC e SI"
         )
         if ies_txt and ies_txt not in ("Todas", ""):
             partes.append(f"IES: {ies_txt.lower()}")
